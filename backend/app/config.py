@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_BASE_URL: str = ""
     OPENAI_API_KEY: str = ""
-    AI_MODEL: str = "anthropic/claude-sonnet-4-20250514"
+    AI_MODEL: str = "anthropic/claude-sonnet-4"
     JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 1440  # 24 hours
