@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - Chatbot MVP</title>
+  <style>
+    /* ── Reset & Base ──────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f3f4f6; color: #1f2937; }
+    a { color: inherit; text-decoration: none; }
+    button { cursor: pointer; font-family: inherit; }
+    input, textarea, select { font-family: inherit; font-size: 14px; }
+
+    /* ── Login ─────────────────────────────────────── */
+    .login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-card { background: #fff; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); width: 380px; max-width: 90vw; }
+    .login-card h1 { font-size: 24px; margin-bottom: 8px; }
+    .login-card p { color: #6b7280; margin-bottom: 24px; font-size: 14px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #374151; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; outline: none; transition: border-color .2s;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: #2563eb; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; border: none; transition: background .2s, opacity .2s; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    .btn-block { width: 100%; }
+    .error-msg { color: #ef4444; font-size: 13px; margin-top: 8px; }
+    .success-msg { color: #10b981; font-size: 13px; margin-top: 8px; }
+
+    /* ── Layout ────────────────────────────────────── */
+    .app { display: none; }
+    .sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 220px; background: #1e293b; color: #fff;
+      padding: 24px 0; display: flex; flex-direction: column;
+    }
+    .sidebar-brand { padding: 0 20px 24px; font-size: 18px; font-weight: 700; border-bottom: 1px solid #334155; margin-bottom: 12px; }
+    .sidebar-nav { flex: 1; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 12px 20px; font-size: 14px;
+      color: #94a3b8; cursor: pointer; transition: background .15s, color .15s;
+    }
+    .nav-item:hover { background: #334155; color: #fff; }
+    .nav-item.active { background: #2563eb; color: #fff; }
+    .nav-item svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
+    .sidebar-footer { padding: 16px 20px; border-top: 1px solid #334155; }
+    .sidebar-footer button { background: none; border: none; color: #94a3b8; font-size: 13px; cursor: pointer; }
+    .sidebar-footer button:hover { color: #fff; }
+
+    .main { margin-left: 220px; padding: 32px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .page-header h2 { font-size: 22px; }
+
+    /* ── Cards & Stats ─────────────────────────────── */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .stat-card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .stat-card .label { font-size: 13px; color: #6b7280; margin-bottom: 4px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; }
+
+    /* ── Table ──────────────────────────────────────── */
+    .table-wrap { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.05); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px 16px; font-size: 12px; text-transform: uppercase; color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: #f9fafb; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .badge-intent { background: #dbeafe; color: #1d4ed8; }
+    .badge-ai { background: #fef3c7; color: #92400e; }
+    .badge-active { background: #d1fae5; color: #065f46; }
+
+    /* ── Modal ──────────────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: 16px; padding: 32px; width: 500px; max-width: 90vw; max-height: 90vh; overflow-y: auto; }
+    .modal h3 { font-size: 18px; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+
+    /* ── Conversation detail ───────────────────────── */
+    .chat-history { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 16px; background: #f7f8fa; border-radius: 8px; }
+    .chat-msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; }
+    .chat-msg.user { background: #2563eb; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+    .chat-msg.assistant { background: #fff; border: 1px solid #e5e7eb; align-self: flex-start; border-bottom-left-radius: 4px; }
+    .chat-msg .meta { font-size: 11px; opacity: .6; margin-top: 4px; }
+
+    /* ── Embed code ─────────────────────────────────── */
+    .embed-preview { background: #1e1e2e; color: #cdd6f4; padding: 20px; border-radius: 8px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; font-family: "Cascadia Code", "Fira Code", monospace; position: relative; }
+    .embed-copy { position: absolute; top: 8px; right: 8px; background: #374151; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .embed-copy:hover { background: #4b5563; }
+    .color-preview { width: 36px; height: 36px; border-radius: 8px; border: 2px solid #d1d5db; cursor: pointer; }
+
+    /* ── Sections ───────────────────────────────────── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Responsive ─────────────────────────────────── */
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; }
+      .sidebar-brand, .nav-item span, .sidebar-footer span { display: none; }
+      .nav-item { justify-content: center; padding: 14px; }
+      .main { margin-left: 60px; padding: 20px; }
+    }
+
+    /* ── Empty state ───────────────────────────────── */
+    .empty-state { text-align: center; padding: 48px 24px; color: #9ca3af; }
+    .empty-state svg { width: 48px; height: 48px; fill: #d1d5db; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════ LOGIN ═══════ -->
+  <div class="login-page" id="loginPage">
+    <div class="login-card">
+      <h1>Chatbot Admin</h1>
+      <p>Inicia sesion para gestionar tu chatbot</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="admin@ejemplo.com" />
+      </div>
+      <div class="form-group">
+        <label>Contrasena</label>
+        <input type="password" id="loginPassword" placeholder="Tu contrasena" />
+      </div>
+      <div id="loginError" class="error-msg" style="display:none"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="handleLogin()">Entrar</button>
+      <p style="text-align:center;margin-top:16px;font-size:13px;color:#9ca3af">
+        Primera vez? <a href="#" style="color:#2563eb" onclick="handleRegister(event)">Crear cuenta</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- ═══════ APP ═══════ -->
+  <div class="app" id="app">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-brand">Chatbot MVP</div>
+      <nav class="sidebar-nav">
+        <div class="nav-item active" data-section="dashboard">
+          <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          <span>Dashboard</span>
+        </div>
+        <div class="nav-item" data-section="intents">
+          <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>
+          <span>Intents</span>
+        </div>
+        <div class="nav-item" data-section="conversations">
+          <svg viewBox="0 0 24 24"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
+          <span>Conversaciones</span>
+        </div>
+        <div class="nav-item" data-section="business">
+          <svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+          <span>Negocio</span>
+        </div>
+        <div class="nav-item" data-section="embed">
+          <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+          <span>Integrar</span>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button onclick="handleLogout()"><span>Cerrar sesion</span></button>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="main">
+
+      <!-- ── Dashboard ──────────────────── -->
+      <div class="section active" id="sec-dashboard">
+        <div class="page-header"><h2>Dashboard</h2></div>
+        <div class="stats-grid" id="statsGrid"></div>
+        <div class="page-header"><h2>Top Intents</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Intent</th><th>Usos</th></tr></thead>
+            <tbody id="topIntentsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Intents ────────────────────── -->
+      <div class="section" id="sec-intents">
+        <div class="page-header">
+          <h2>Intents</h2>
+          <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nombre</th><th>Keywords</th><th>Respuesta</th><th>Prioridad</th><th>Acciones</th></tr></thead>
+            <tbody id="intentsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Conversations ──────────────── -->
+      <div class="section" id="sec-conversations">
+        <div class="page-header"><h2>Conversaciones</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Sesion</th><th>Mensajes</th><th>Ultimo mensaje</th><th>Fecha</th><th></th></tr></thead>
+            <tbody id="conversationsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Business ───────────────────── -->
+      <div class="section" id="sec-business">
+        <div class="page-header"><h2>Datos del negocio</h2></div>
+        <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-width:640px">
+          <div class="form-group"><label>Nombre</label><input id="bizName" /></div>
+          <div class="form-group"><label>Descripcion</label><textarea id="bizDescription" rows="3"></textarea></div>
+          <div class="form-group"><label>Direccion</label><input id="bizAddress" /></div>
+          <div class="form-group"><label>Telefono</label><input id="bizPhone" /></div>
+          <div class="form-group"><label>Email</label><input id="bizEmail" /></div>
+          <div class="form-group"><label>Horarios (JSON)</label><textarea id="bizSchedule" rows="4"></textarea></div>
+          <div class="form-group"><label>Info extra</label><textarea id="bizExtraInfo" rows="3"></textarea></div>
+          <div id="bizMsg" style="display:none"></div>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="saveBusiness()">Guardar cambios</button>
+        </div>
+      </div>
+
+      <!-- ── Embed ─────────────────────────── -->
+      <div class="section" id="sec-embed">
+        <div class="page-header"><h2>Integrar widget</h2></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:900px">
+
+          <!-- Config -->
+          <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+            <h3 style="font-size:16px;margin-bottom:16px">Personalizar</h3>
+            <div class="form-group"><label>Titulo del chat</label><input id="embedTitle" value="Chat" oninput="updateEmbed()" /></div>
+            <div class="form-group"><label>Subtitulo</label><input id="embedSubtitle" value="Te responderemos al instante" oninput="updateEmbed()" /></div>
+            <div class="form-group"><label>Mensaje de bienvenida</label><input id="embedWelcome" value="Hola! En que puedo ayudarte?" oninput="updateEmbed()" /></div>
+            <div class="form-group"><label>Placeholder</label><input id="embedPlaceholder" value="Escribe tu mensaje..." oninput="updateEmbed()" /></div>
+            <div class="form-group">
+              <label>Color principal</label>
+              <div style="display:flex;align-items:center;gap:12px">
+                <input type="color" id="embedColor" value="#2563eb" class="color-preview" oninput="updateEmbed()" />
+                <input id="embedColorText" value="#2563eb" style="width:100px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-family:monospace" oninput="document.getElementById('embedColor').value=this.value;updateEmbed()" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Posicion</label>
+              <select id="embedPosition" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px" onchange="updateEmbed()">
+                <option value="right">Derecha</option>
+                <option value="left">Izquierda</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Code output -->
+          <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05)">
+            <h3 style="font-size:16px;margin-bottom:16px">Codigo para tu web</h3>
+            <p style="font-size:13px;color:#6b7280;margin-bottom:12px">Pega este codigo antes de <code>&lt;/body&gt;</code> en tu pagina web:</p>
+            <div class="embed-preview" id="embedCode">
+              <button class="embed-copy" onclick="copyEmbed()">Copiar</button>
+              <code id="embedCodeText"></code>
+            </div>
+            <div id="embedCopied" class="success-msg" style="display:none;margin-top:8px">Copiado al portapapeles</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /main -->
+  </div><!-- /app -->
+
+  <!-- ═══════ MODAL: Intent ═══════ -->
+  <div class="modal-overlay" id="intentModal">
+    <div class="modal">
+      <h3 id="intentModalTitle">Nuevo intent</h3>
+      <input type="hidden" id="intentId" />
+      <div class="form-group"><label>Nombre</label><input id="intentName" placeholder="ej: horarios" /></div>
+      <div class="form-group"><label>Keywords (separadas por coma)</label><input id="intentKeywords" placeholder="horario, hora, abierto" /></div>
+      <div class="form-group"><label>Respuesta</label><textarea id="intentResponse" rows="4" placeholder="La respuesta que dara el bot..."></textarea></div>
+      <div class="form-group"><label>Prioridad</label><input type="number" id="intentPriority" value="5" /></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeIntentModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveIntent()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Conversation detail ═══════ -->
+  <div class="modal-overlay" id="convModal">
+    <div class="modal" style="width:600px">
+      <h3>Detalle de conversacion</h3>
+      <div class="chat-history" id="convMessages"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeConvModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ════════════════════════════════════════════════
+       CONFIG & STATE
+       ════════════════════════════════════════════════ */
+    const API = window.location.origin;
+    let token = localStorage.getItem("admin_token") || "";
+    let businessId = parseInt(localStorage.getItem("admin_business_id") || "1", 10);
+
+    /* ════════════════════════════════════════════════
+       AUTH
+       ════════════════════════════════════════════════ */
+    function headers() {
+      return { "Content-Type": "application/json", Authorization: "Bearer " + token };
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const errEl = document.getElementById("loginError");
+      errEl.style.display = "none";
+
+      try {
+        const res = await fetch(`${API}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        if (!res.ok) throw new Error("Credenciales invalidas");
+        const data = await res.json();
+        token = data.access_token;
+        localStorage.setItem("admin_token", token);
+        // Decode business_id from JWT payload
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          if (payload.business_id) {
+            businessId = payload.business_id;
+            localStorage.setItem("admin_business_id", businessId);
+          }
+        } catch(e) {}
+        showApp();
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = "block";
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const errEl = document.getElementById("loginError");
+      errEl.style.display = "none";
+
+      if (!email || !password) {
+        errEl.textContent = "Completa email y contrasena";
+        errEl.style.display = "block";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, business_id: businessId }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.detail || "Error al registrar");
+        }
+        const data = await res.json();
+        token = data.access_token;
+        localStorage.setItem("admin_token", token);
+        showApp();
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = "block";
+      }
+    }
+
+    function handleLogout() {
+      token = "";
+      localStorage.removeItem("admin_token");
+      document.getElementById("app").style.display = "none";
+      document.getElementById("loginPage").style.display = "flex";
+    }
+
+    /* ════════════════════════════════════════════════
+       NAVIGATION
+       ════════════════════════════════════════════════ */
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        document.querySelectorAll(".nav-item").forEach((i) => i.classList.remove("active"));
+        item.classList.add("active");
+        const section = item.getAttribute("data-section");
+        document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
+        document.getElementById("sec-" + section).classList.add("active");
+
+        if (section === "dashboard") loadDashboard();
+        if (section === "intents") loadIntents();
+        if (section === "conversations") loadConversations();
+        if (section === "business") loadBusiness();
+        if (section === "embed") updateEmbed();
+      });
+    });
+
+    /* ════════════════════════════════════════════════
+       DASHBOARD
+       ════════════════════════════════════════════════ */
+    async function loadDashboard() {
+      try {
+        const res = await fetch(`${API}/metrics/?business_id=${businessId}`);
+        const m = await res.json();
+
+        document.getElementById("statsGrid").innerHTML = `
+          <div class="stat-card"><div class="label">Conversaciones</div><div class="value">${m.total_conversations}</div></div>
+          <div class="stat-card"><div class="label">Mensajes</div><div class="value">${m.total_messages}</div></div>
+          <div class="stat-card"><div class="label">Fallback IA</div><div class="value">${m.ai_fallback_rate}%</div></div>
+          <div class="stat-card"><div class="label">Tiempo resp. medio</div><div class="value">${m.avg_response_time_ms}ms</div></div>
+        `;
+
+        const tbody = document.getElementById("topIntentsBody");
+        if (m.top_intents.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="2" style="text-align:center;color:#9ca3af;padding:24px">Sin datos aun</td></tr>`;
+        } else {
+          tbody.innerHTML = m.top_intents.map((i) => `<tr><td>${esc(i.intent_name)}</td><td>${i.count}</td></tr>`).join("");
+        }
+      } catch (e) {
+        console.error("loadDashboard", e);
+      }
+    }
+
+    /* ════════════════════════════════════════════════
+       INTENTS
+       ════════════════════════════════════════════════ */
+    async function loadIntents() {
+      try {
+        const res = await fetch(`${API}/intents/?business_id=${businessId}`);
+        const intents = await res.json();
+        const tbody = document.getElementById("intentsBody");
+
+        if (intents.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">No hay intents</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = intents.map((i) => {
+          let kw = [];
+          try { kw = JSON.parse(i.keywords); } catch(e) {}
+          return `<tr>
+            <td><strong>${esc(i.name)}</strong></td>
+            <td>${kw.map(k => `<span class="badge badge-intent">${esc(k)}</span>`).join(" ")}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.response)}</td>
+            <td>${i.priority}</td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="editIntent(${i.id})">Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteIntent(${i.id})">Borrar</button>
+            </td>
+          </tr>`;
+        }).join("");
+      } catch (e) {
+        console.error("loadIntents", e);
+      }
+    }
+
+    function openIntentModal(data) {
+      document.getElementById("intentModalTitle").textContent = data ? "Editar intent" : "Nuevo intent";
+      document.getElementById("intentId").value = data ? data.id : "";
+      document.getElementById("intentName").value = data ? data.name : "";
+      let kw = [];
+      if (data) try { kw = JSON.parse(data.keywords); } catch(e) {}
+      document.getElementById("intentKeywords").value = kw.join(", ");
+      document.getElementById("intentResponse").value = data ? data.response : "";
+      document.getElementById("intentPriority").value = data ? data.priority : 5;
+      document.getElementById("intentModal").classList.add("open");
+    }
+
+    function closeIntentModal() {
+      document.getElementById("intentModal").classList.remove("open");
+    }
+
+    async function editIntent(id) {
+      const res = await fetch(`${API}/intents/${id}`);
+      const data = await res.json();
+      openIntentModal(data);
+    }
+
+    async function saveIntent() {
+      const id = document.getElementById("intentId").value;
+      const name = document.getElementById("intentName").value.trim();
+      const keywords = JSON.stringify(document.getElementById("intentKeywords").value.split(",").map(k => k.trim()).filter(Boolean));
+      const response = document.getElementById("intentResponse").value.trim();
+      const priority = parseInt(document.getElementById("intentPriority").value, 10) || 5;
+
+      const body = id
+        ? { name, keywords, response, priority }
+        : { name, keywords, response, priority, business_id: businessId };
+
+      const url = id ? `${API}/intents/${id}` : `${API}/intents/`;
+      const method = id ? "PUT" : "POST";
+
+      try {
+        const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error("Error al guardar");
+        closeIntentModal();
+        loadIntents();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function deleteIntent(id) {
+      if (!confirm("Seguro que quieres borrar este intent?")) return;
+      await fetch(`${API}/intents/${id}`, { method: "DELETE" });
+      loadIntents();
+    }
+
+    /* ════════════════════════════════════════════════
+       CONVERSATIONS
+       ════════════════════════════════════════════════ */
+    async function loadConversations() {
+      try {
+        const res = await fetch(`${API}/conversations/?business_id=${businessId}&limit=50`);
+        const convs = await res.json();
+        const tbody = document.getElementById("conversationsBody");
+
+        if (convs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">No hay conversaciones</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = convs.map((c) => {
+          const date = new Date(c.started_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+          const last = c.last_message ? (c.last_message.length > 50 ? c.last_message.slice(0, 50) + "..." : c.last_message) : "-";
+          return `<tr>
+            <td>#${c.id}</td>
+            <td style="font-family:monospace;font-size:12px">${esc(c.session_id).slice(0, 16)}...</td>
+            <td>${c.message_count}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last)}</td>
+            <td>${date}</td>
+            <td><button class="btn btn-secondary btn-sm" onclick="viewConversation(${c.id})">Ver</button></td>
+          </tr>`;
+        }).join("");
+      } catch (e) {
+        console.error("loadConversations", e);
+      }
+    }
+
+    async function viewConversation(id) {
+      try {
+        const res = await fetch(`${API}/conversations/${id}`);
+        const conv = await res.json();
+        const el = document.getElementById("convMessages");
+
+        el.innerHTML = conv.messages.map((m) => {
+          const time = new Date(m.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+          const sourceTag = m.source ? ` <span class="badge ${m.source === 'intent' ? 'badge-intent' : 'badge-ai'}">${m.source}</span>` : "";
+          return `<div class="chat-msg ${m.role}">
+            ${esc(m.content)}
+            <div class="meta">${time}${sourceTag}</div>
+          </div>`;
+        }).join("");
+
+        document.getElementById("convModal").classList.add("open");
+      } catch (e) {
+        console.error("viewConversation", e);
+      }
+    }
+
+    function closeConvModal() {
+      document.getElementById("convModal").classList.remove("open");
+    }
+
+    /* ════════════════════════════════════════════════
+       BUSINESS
+       ════════════════════════════════════════════════ */
+    async function loadBusiness() {
+      try {
+        const res = await fetch(`${API}/business/${businessId}`);
+        const b = await res.json();
+        document.getElementById("bizName").value = b.name || "";
+        document.getElementById("bizDescription").value = b.description || "";
+        document.getElementById("bizAddress").value = b.address || "";
+        document.getElementById("bizPhone").value = b.phone || "";
+        document.getElementById("bizEmail").value = b.email || "";
+        document.getElementById("bizExtraInfo").value = b.extra_info || "";
+        // Pretty-print schedule
+        try {
+          document.getElementById("bizSchedule").value = JSON.stringify(JSON.parse(b.schedule), null, 2);
+        } catch(e) {
+          document.getElementById("bizSchedule").value = b.schedule || "{}";
+        }
+      } catch (e) {
+        console.error("loadBusiness", e);
+      }
+    }
+
+    async function saveBusiness() {
+      const msgEl = document.getElementById("bizMsg");
+      msgEl.style.display = "none";
+
+      const body = {
+        name: document.getElementById("bizName").value.trim(),
+        description: document.getElementById("bizDescription").value.trim(),
+        address: document.getElementById("bizAddress").value.trim(),
+        phone: document.getElementById("bizPhone").value.trim(),
+        email: document.getElementById("bizEmail").value.trim(),
+        schedule: document.getElementById("bizSchedule").value.trim(),
+        extra_info: document.getElementById("bizExtraInfo").value.trim(),
+      };
+
+      try {
+        const res = await fetch(`${API}/business/${businessId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error("Error al guardar");
+        msgEl.textContent = "Guardado correctamente";
+        msgEl.className = "success-msg";
+        msgEl.style.display = "block";
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
+    }
+
+    /* ════════════════════════════════════════════════
+       EMBED CODE GENERATOR
+       ════════════════════════════════════════════════ */
+    function updateEmbed() {
+      const title = document.getElementById("embedTitle").value;
+      const subtitle = document.getElementById("embedSubtitle").value;
+      const welcome = document.getElementById("embedWelcome").value;
+      const placeholder = document.getElementById("embedPlaceholder").value;
+      const color = document.getElementById("embedColor").value;
+      const position = document.getElementById("embedPosition").value;
+      document.getElementById("embedColorText").value = color;
+
+      const origin = window.location.origin;
+      const code = `<script\n  src="${origin}/widget/chat-widget.js"\n  data-api-url="${origin}"\n  data-business-id="${businessId}"\n  data-title="${title}"\n  data-subtitle="${subtitle}"\n  data-welcome="${welcome}"\n  data-placeholder="${placeholder}"\n  data-primary-color="${color}"\n  data-position="${position}"\n><\/script>`;
+
+      document.getElementById("embedCodeText").textContent = code;
+    }
+
+    function copyEmbed() {
+      const code = document.getElementById("embedCodeText").textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        const msg = document.getElementById("embedCopied");
+        msg.style.display = "block";
+        setTimeout(() => { msg.style.display = "none"; }, 2000);
+      });
+    }
+
+    /* ════════════════════════════════════════════════
+       INIT
+       ════════════════════════════════════════════════ */
+    function esc(str) {
+      const d = document.createElement("div");
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function showApp() {
+      document.getElementById("loginPage").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      loadDashboard();
+    }
+
+    // Auto-login if token exists
+    if (token) {
+      showApp();
+    }
+
+    // Close modals on overlay click
+    document.querySelectorAll(".modal-overlay").forEach((overlay) => {
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.classList.remove("open");
+      });
+    });
+
+    // Enter key on login
+    document.getElementById("loginPassword").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleLogin();
+    });
+  </script>
+
+</body>
+</html>

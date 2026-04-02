@@ -1,0 +1,7 @@
+n8n-mcp/
+**/__pycache__/
+**/*.pyc
+*.db
+.env
+.git/
+.gitignore
