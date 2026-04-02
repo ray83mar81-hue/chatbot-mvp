@@ -205,6 +205,14 @@
   }
 
   /* ── API ────────────────────────────────────────────────────── */
+  function addBotBubble() {
+    const div = document.createElement("div");
+    div.className = "cw-msg cw-msg-bot";
+    messagesEl.appendChild(div);
+    scrollBottom();
+    return div;
+  }
+
   async function sendMessage(text) {
     if (isSending || !text.trim()) return;
     isSending = true;
@@ -214,21 +222,54 @@
     input.value = "";
     showTyping();
 
+    const payload = JSON.stringify({
+      message: text.trim(),
+      session_id: getSessionId(),
+      business_id: CONFIG.businessId,
+    });
+
     try {
-      const res = await fetch(`${CONFIG.apiUrl}/chat/message`, {
+      const res = await fetch(`${CONFIG.apiUrl}/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text.trim(),
-          session_id: getSessionId(),
-          business_id: CONFIG.businessId,
-        }),
+        body: payload,
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      hideTyping();
-      addMessage(data.response, "bot");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let botBubble = null;
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "start") {
+              hideTyping();
+              botBubble = addBotBubble();
+            } else if (event.type === "chunk" && botBubble) {
+              botBubble.textContent += event.content;
+              scrollBottom();
+            }
+          } catch (e) { /* skip malformed */ }
+        }
+      }
+
+      if (!botBubble) {
+        // Fallback if stream didn't produce output
+        hideTyping();
+        addMessage("Lo siento, no pude procesar tu mensaje.", "bot");
+      }
     } catch (err) {
       hideTyping();
       addMessage("Lo siento, hubo un error de conexion. Intenta de nuevo.", "bot");

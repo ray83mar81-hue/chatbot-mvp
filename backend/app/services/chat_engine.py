@@ -6,7 +6,7 @@ from app.models.business import Business
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.ai_service import generate_ai_response
+from app.services.ai_service import generate_ai_response, stream_ai_response
 from app.services.intent_matcher import match_intent
 
 
@@ -118,3 +118,67 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
         session_id=request.session_id,
         intent_name=intent_name,
     )
+
+
+async def process_message_stream(request: ChatRequest, db: Session):
+    """
+    Streaming version of process_message.
+    Yields SSE events: intent responses immediately, AI responses as stream chunks.
+    """
+    import json as _json
+
+    business = db.query(Business).filter(Business.id == request.business_id).first()
+    if not business:
+        yield f"data: {_json.dumps({'type': 'error', 'content': 'Negocio no encontrado'})}\n\n"
+        return
+
+    conversation = _get_or_create_conversation(db, request.session_id, request.business_id)
+
+    user_msg = Message(conversation_id=conversation.id, role="user", content=request.message)
+    db.add(user_msg)
+    db.commit()
+
+    matched_intent = match_intent(request.message, db, request.business_id)
+
+    if matched_intent:
+        # Intent match — send full response at once
+        response_text = matched_intent.response
+        yield f"data: {_json.dumps({'type': 'start', 'source': 'intent'})}\n\n"
+        yield f"data: {_json.dumps({'type': 'chunk', 'content': response_text})}\n\n"
+        yield f"data: {_json.dumps({'type': 'end'})}\n\n"
+        source = "intent"
+        intent_id = matched_intent.id
+    else:
+        # AI stream
+        history = (
+            db.query(Message)
+            .filter(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at)
+            .all()
+        )
+        history = [m for m in history if m.id != user_msg.id]
+
+        yield f"data: {_json.dumps({'type': 'start', 'source': 'ai'})}\n\n"
+        response_text = ""
+        async for chunk in stream_ai_response(
+            business=business, conversation_history=history, user_message=request.message
+        ):
+            response_text += chunk
+            yield f"data: {_json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        yield f"data: {_json.dumps({'type': 'end'})}\n\n"
+        source = "ai"
+        intent_id = None
+
+    start_time = time.time()
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
+    bot_msg = Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=response_text,
+        source=source,
+        intent_matched_id=intent_id,
+        response_time_ms=elapsed_ms,
+    )
+    db.add(bot_msg)
+    db.commit()

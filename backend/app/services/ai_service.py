@@ -46,18 +46,20 @@ def _build_messages(conversation_history: list[Message], user_message: str) -> l
     return messages
 
 
+def _get_client() -> anthropic.AsyncAnthropic:
+    client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
+    if settings.ANTHROPIC_BASE_URL:
+        client_kwargs["base_url"] = settings.ANTHROPIC_BASE_URL
+    return anthropic.AsyncAnthropic(**client_kwargs)
+
+
 async def generate_ai_response(
     business: Business,
     conversation_history: list[Message],
     user_message: str,
 ) -> str:
     """Generate a response using Claude API (direct or via OpenRouter)."""
-    client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
-    if settings.ANTHROPIC_BASE_URL:
-        client_kwargs["base_url"] = settings.ANTHROPIC_BASE_URL
-
-    client = anthropic.AsyncAnthropic(**client_kwargs)
-
+    client = _get_client()
     system_prompt = _build_system_prompt(business)
     messages = _build_messages(conversation_history, user_message)
 
@@ -72,6 +74,33 @@ async def generate_ai_response(
     except Exception as e:
         print(f"[AI Error] {type(e).__name__}: {e}")
         return (
+            f"Lo siento, no puedo responder a eso ahora mismo. "
+            f"Puedes contactarnos en {business.phone} o {business.email}."
+        )
+
+
+async def stream_ai_response(
+    business: Business,
+    conversation_history: list[Message],
+    user_message: str,
+):
+    """Yield text chunks from Claude API stream."""
+    client = _get_client()
+    system_prompt = _build_system_prompt(business)
+    messages = _build_messages(conversation_history, user_message)
+
+    try:
+        async with client.messages.stream(
+            model=settings.AI_MODEL,
+            max_tokens=500,
+            system=system_prompt,
+            messages=messages,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+    except Exception as e:
+        print(f"[AI Stream Error] {type(e).__name__}: {e}")
+        yield (
             f"Lo siento, no puedo responder a eso ahora mismo. "
             f"Puedes contactarnos en {business.phone} o {business.email}."
         )
