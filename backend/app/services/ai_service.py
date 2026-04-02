@@ -61,11 +61,17 @@ async def generate_ai_response(
     system_prompt = _build_system_prompt(business)
     messages = _build_messages(conversation_history, user_message)
 
-    response = await client.messages.create(
-        model=settings.AI_MODEL,
-        max_tokens=500,
-        system=system_prompt,
-        messages=messages,
-    )
-
-    return response.content[0].text
+    try:
+        response = await client.messages.create(
+            model=settings.AI_MODEL,
+            max_tokens=500,
+            system=system_prompt,
+            messages=messages,
+        )
+        return response.content[0].text
+    except Exception as e:
+        print(f"[AI Error] {type(e).__name__}: {e}")
+        return (
+            f"Lo siento, no puedo responder a eso ahora mismo. "
+            f"Puedes contactarnos en {business.phone} o {business.email}."
+        )
