@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480">
+  <!-- Blue background -->
+  <rect width="640" height="480" fill="#012169"/>
+  <!-- White diagonal cross -->
+  <path d="M0 0L640 480M640 0L0 480" stroke="#fff" stroke-width="60"/>
+  <!-- Red diagonal cross -->
+  <path d="M0 0L640 480M640 0L0 480" stroke="#C8102E" stroke-width="40"/>
+  <!-- White vertical/horizontal cross -->
+  <rect x="270" width="100" height="480" fill="#fff"/>
+  <rect y="190" width="640" height="100" fill="#fff"/>
+  <!-- Red vertical/horizontal cross -->
+  <rect x="285" width="70" height="480" fill="#C8102E"/>
+  <rect y="205" width="640" height="70" fill="#C8102E"/>
+</svg>

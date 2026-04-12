@@ -7,13 +7,23 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str
     business_id: int = 1  # Default for MVP single-business
+    language: str | None = None  # ISO code; if None, falls back to business default
+
+
+class ChatButton(BaseModel):
+    """Optional CTA button attached to an intent response."""
+    label: str
+    url: str
+    open_new_tab: bool = True
 
 
 class ChatResponse(BaseModel):
     response: str
     source: str  # "intent" | "ai"
     session_id: str
+    language: str
     intent_name: str | None = None
+    button: ChatButton | None = None
 
 
 class MessageResponse(BaseModel):

@@ -5,3 +5,10 @@ n8n-mcp/
 .env
 .git/
 .gitignore
+.claude/
+*.md
+docker-compose.yml
+.vscode/
+.idea/
+venv/
+.venv/

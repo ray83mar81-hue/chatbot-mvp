@@ -1,13 +1,42 @@
+import json as _json
 import time
 
 from sqlalchemy.orm import Session
 
 from app.models.business import Business
 from app.models.conversation import Conversation
+from app.models.intent import Intent
+from app.models.intent_translation import IntentTranslation
 from app.models.message import Message
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatButton, ChatRequest, ChatResponse
 from app.services.ai_service import generate_ai_response, stream_ai_response
 from app.services.intent_matcher import match_intent
+
+
+def _resolve_language(request_lang: str | None, business: Business) -> str:
+    """Pick the language to use for this turn."""
+    if request_lang:
+        return request_lang
+    return business.default_language or "es"
+
+
+def _build_button(
+    intent: Intent, translation: IntentTranslation, language: str
+) -> ChatButton | None:
+    """
+    Build a ChatButton from intent + translation, or None if no button is set.
+    The URL supports a {lang} placeholder that gets replaced with the active
+    language code (e.g. "https://web.com/{lang}/horarios" → ".../en/horarios").
+    """
+    url = (intent.button_url or "").strip()
+    label = (translation.button_label or "").strip() if translation else ""
+    if not url or not label:
+        return None
+    return ChatButton(
+        label=label,
+        url=url.replace("{lang}", language),
+        open_new_tab=bool(intent.button_open_new_tab),
+    )
 
 
 def _get_or_create_conversation(
@@ -40,8 +69,8 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
     Main chat pipeline:
     1. Get/create conversation
     2. Save user message
-    3. Try intent matching
-    4. If no match → AI fallback
+    3. Try intent matching in the active language
+    4. If no match → AI fallback (forced to respond in the active language)
     5. Save bot response
     6. Return response
     """
@@ -54,7 +83,10 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
             response="Lo siento, no se encontró la configuración del negocio.",
             source="fallback",
             session_id=request.session_id,
+            language=request.language or "es",
         )
+
+    language = _resolve_language(request.language, business)
 
     # Get or create conversation
     conversation = _get_or_create_conversation(
@@ -70,14 +102,17 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
     db.add(user_msg)
     db.commit()
 
-    # Try intent matching first
-    matched_intent = match_intent(request.message, db, request.business_id)
+    # Try intent matching first (in the user's language)
+    matched = match_intent(request.message, db, request.business_id, language)
 
-    if matched_intent:
-        response_text = matched_intent.response
+    button: ChatButton | None = None
+    if matched:
+        intent, translation = matched
+        response_text = translation.response
         source = "intent"
-        intent_name = matched_intent.name
-        intent_id = matched_intent.id
+        intent_name = intent.name
+        intent_id = intent.id
+        button = _build_button(intent, translation, language)
     else:
         # AI fallback — send conversation history for context
         history = (
@@ -93,6 +128,7 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
             business=business,
             conversation_history=history,
             user_message=request.message,
+            language=language,
         )
         source = "ai"
         intent_name = None
@@ -116,21 +152,27 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
         response=response_text,
         source=source,
         session_id=request.session_id,
+        language=language,
         intent_name=intent_name,
+        button=button,
     )
 
 
 async def process_message_stream(request: ChatRequest, db: Session):
     """
     Streaming version of process_message.
-    Yields SSE events: intent responses immediately, AI responses as stream chunks.
+    Yields SSE events:
+      - {"type": "start", "source": "intent"|"ai", "language": "..."}
+      - {"type": "chunk", "content": "..."}
+      - {"type": "button", "label": "...", "url": "...", "open_new_tab": bool}  (only if intent has a button)
+      - {"type": "end"}
     """
-    import json as _json
-
     business = db.query(Business).filter(Business.id == request.business_id).first()
     if not business:
         yield f"data: {_json.dumps({'type': 'error', 'content': 'Negocio no encontrado'})}\n\n"
         return
+
+    language = _resolve_language(request.language, business)
 
     conversation = _get_or_create_conversation(db, request.session_id, request.business_id)
 
@@ -138,16 +180,21 @@ async def process_message_stream(request: ChatRequest, db: Session):
     db.add(user_msg)
     db.commit()
 
-    matched_intent = match_intent(request.message, db, request.business_id)
+    matched = match_intent(request.message, db, request.business_id, language)
 
-    if matched_intent:
-        # Intent match — send full response at once
-        response_text = matched_intent.response
-        yield f"data: {_json.dumps({'type': 'start', 'source': 'intent'})}\n\n"
+    button: ChatButton | None = None
+    if matched:
+        intent, translation = matched
+        response_text = translation.response
+        button = _build_button(intent, translation, language)
+
+        yield f"data: {_json.dumps({'type': 'start', 'source': 'intent', 'language': language})}\n\n"
         yield f"data: {_json.dumps({'type': 'chunk', 'content': response_text})}\n\n"
+        if button:
+            yield f"data: {_json.dumps({'type': 'button', 'label': button.label, 'url': button.url, 'open_new_tab': button.open_new_tab})}\n\n"
         yield f"data: {_json.dumps({'type': 'end'})}\n\n"
         source = "intent"
-        intent_id = matched_intent.id
+        intent_id = intent.id
     else:
         # AI stream
         history = (
@@ -158,10 +205,13 @@ async def process_message_stream(request: ChatRequest, db: Session):
         )
         history = [m for m in history if m.id != user_msg.id]
 
-        yield f"data: {_json.dumps({'type': 'start', 'source': 'ai'})}\n\n"
+        yield f"data: {_json.dumps({'type': 'start', 'source': 'ai', 'language': language})}\n\n"
         response_text = ""
         async for chunk in stream_ai_response(
-            business=business, conversation_history=history, user_message=request.message
+            business=business,
+            conversation_history=history,
+            user_message=request.message,
+            language=language,
         ):
             response_text += chunk
             yield f"data: {_json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
@@ -169,16 +219,13 @@ async def process_message_stream(request: ChatRequest, db: Session):
         source = "ai"
         intent_id = None
 
-    start_time = time.time()
-    elapsed_ms = int((time.time() - start_time) * 1000)
-
     bot_msg = Message(
         conversation_id=conversation.id,
         role="assistant",
         content=response_text,
         source=source,
         intent_matched_id=intent_id,
-        response_time_ms=elapsed_ms,
+        response_time_ms=0,
     )
     db.add(bot_msg)
     db.commit()

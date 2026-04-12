@@ -4,6 +4,7 @@ import unicodedata
 from sqlalchemy.orm import Session
 
 from app.models.intent import Intent
+from app.models.intent_translation import IntentTranslation
 
 
 def _normalize(text: str) -> str:
@@ -46,16 +47,31 @@ EXACT_WEIGHT = 2.0      # score boost for exact substring match
 FUZZY_WEIGHT = 1.0      # score for fuzzy match
 
 
-def match_intent(user_message: str, db: Session, business_id: int) -> Intent | None:
+def match_intent(
+    user_message: str,
+    db: Session,
+    business_id: int,
+    language: str,
+) -> tuple[Intent, IntentTranslation] | None:
     """
-    Match user message against active intents using:
-    1. Exact substring match (keyword found in message)
-    2. Fuzzy match per word (handles typos like "horarioo", "precis")
-    Returns the best matching intent or None.
+    Match user message against active intents in the requested language.
+
+    Joins each Intent with its IntentTranslation in the given language and
+    matches against the LOCALIZED keywords. Intents that don't have a
+    translation in the requested language are skipped (the AI fallback,
+    which is multilingual via system prompt, will handle them).
+
+    Returns a (Intent, IntentTranslation) tuple so the caller can use the
+    localized response and button label, plus the shared button_url.
     """
-    intents = (
-        db.query(Intent)
-        .filter(Intent.business_id == business_id, Intent.is_active.is_(True))
+    rows = (
+        db.query(Intent, IntentTranslation)
+        .join(IntentTranslation, IntentTranslation.intent_id == Intent.id)
+        .filter(
+            Intent.business_id == business_id,
+            Intent.is_active.is_(True),
+            IntentTranslation.language_code == language,
+        )
         .order_by(Intent.priority.desc())
         .all()
     )
@@ -63,18 +79,22 @@ def match_intent(user_message: str, db: Session, business_id: int) -> Intent | N
     normalized_msg = _normalize(user_message)
     msg_words = normalized_msg.split()
 
-    best_match: Intent | None = None
+    best_match: tuple[Intent, IntentTranslation] | None = None
     best_score = 0.0
 
-    for intent in intents:
-        keywords: list[str] = json.loads(intent.keywords)
+    for intent, translation in rows:
+        try:
+            keywords: list[str] = json.loads(translation.keywords or "[]")
+        except json.JSONDecodeError:
+            continue
+
         score = 0.0
 
         for kw in keywords:
             norm_kw = _normalize(kw)
 
             # 1) Exact substring match
-            if norm_kw in normalized_msg:
+            if norm_kw and norm_kw in normalized_msg:
                 score += EXACT_WEIGHT
                 continue
 
@@ -87,7 +107,7 @@ def match_intent(user_message: str, db: Session, business_id: int) -> Intent | N
 
         if score > best_score:
             best_score = score
-            best_match = intent
+            best_match = (intent, translation)
 
     # Require a minimum score to avoid false positives
     if best_score < 1.0:

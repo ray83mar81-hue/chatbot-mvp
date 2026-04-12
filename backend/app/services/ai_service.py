@@ -7,33 +7,46 @@ from app.models.business import Business
 from app.models.message import Message
 
 
-def _build_system_prompt(business: Business) -> str:
-    """Build a system prompt with the business context."""
+# ISO code → friendly name for the system prompt
+LANGUAGE_NAMES = {
+    "es": "Spanish (Español)",
+    "en": "English",
+    "ca": "Catalan (Català)",
+    "fr": "French (Français)",
+    "de": "German (Deutsch)",
+    "it": "Italian (Italiano)",
+    "pt": "Portuguese (Português)",
+}
+
+
+def _build_system_prompt(business: Business, language: str = "es") -> str:
+    """Build a system prompt with the business context and target language."""
     schedule = business.schedule or "{}"
     try:
         schedule_formatted = json.dumps(json.loads(schedule), ensure_ascii=False, indent=2)
     except (json.JSONDecodeError, TypeError):
         schedule_formatted = schedule
 
-    return f"""Eres el asistente virtual de "{business.name}". Tu rol es ayudar a los clientes
-con sus preguntas de manera amable, profesional y concisa.
+    language_name = LANGUAGE_NAMES.get(language, language)
 
-Información del negocio:
-- Nombre: {business.name}
-- Descripción: {business.description}
-- Dirección: {business.address}
-- Teléfono: {business.phone}
+    return f"""You are the virtual assistant of "{business.name}". Your role is to help customers with their questions in a friendly, professional and concise way.
+
+Business information:
+- Name: {business.name}
+- Description: {business.description}
+- Address: {business.address}
+- Phone: {business.phone}
 - Email: {business.email}
-- Horarios: {schedule_formatted}
+- Schedule: {schedule_formatted}
 
-Información adicional:
+Additional info:
 {business.extra_info}
 
-Reglas:
-- Responde SOLO con información del negocio. No inventes datos.
-- Si no tienes la información para responder, indica amablemente que no dispones de esa información y sugiere contactar directamente al negocio.
-- Responde en el mismo idioma que el usuario.
-- Sé conciso: máximo 2-3 oraciones por respuesta a menos que se requiera más detalle.
+Rules:
+- Respond ONLY with information about this business. Do not invent facts.
+- If you don't have the information to answer, kindly say so and suggest contacting the business directly using the phone or email above.
+- IMPORTANT: You MUST respond in {language_name} regardless of what language the user writes in.
+- Be concise: max 2-3 sentences per reply unless more detail is required.
 """
 
 
@@ -57,10 +70,11 @@ async def generate_ai_response(
     business: Business,
     conversation_history: list[Message],
     user_message: str,
+    language: str = "es",
 ) -> str:
     """Generate a response using Claude API (direct or via OpenRouter)."""
     client = _get_client()
-    system_prompt = _build_system_prompt(business)
+    system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
     try:
@@ -83,10 +97,11 @@ async def stream_ai_response(
     business: Business,
     conversation_history: list[Message],
     user_message: str,
+    language: str = "es",
 ):
     """Yield text chunks from Claude API stream."""
     client = _get_client()
-    system_prompt = _build_system_prompt(business)
+    system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
     try:

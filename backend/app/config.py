@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     JWT_EXPIRATION_MINUTES: int = 1440  # 24 hours
     CORS_ORIGINS: str = "*"
 
+    # SMTP for contact form email notifications (leave empty to skip sending)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_USE_TLS: bool = True
+
+    # Salt for hashing client IPs (GDPR compliance)
+    IP_HASH_SALT: str = "change-me-in-production"
+
     model_config = {"env_file": ".env"}
 
 
