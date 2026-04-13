@@ -53,9 +53,9 @@ def on_startup():
     _backfill_business_translations()
 
 
-# Lightweight schema migrations for SQLite. Each entry is a tuple of
+# Lightweight schema migrations. Each entry is a tuple of
 # (table_name, column_name, column_definition_sql). Idempotent — checks if the
-# column already exists before adding it. Suitable for an MVP without Alembic.
+# column already exists before adding it. Works with PostgreSQL and SQLite.
 SCHEMA_MIGRATIONS = [
     ("businesses", "supported_languages", 'TEXT DEFAULT \'["es"]\''),
     ("businesses", "default_language", "VARCHAR(5) DEFAULT 'es'"),

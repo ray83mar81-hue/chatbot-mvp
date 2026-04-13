@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite:///./chatbot.db"
+    DATABASE_URL: str = "postgresql://user:pass@localhost:5432/chatbot"
     AI_PROVIDER: str = "anthropic"  # "anthropic" or "openai"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_BASE_URL: str = ""
