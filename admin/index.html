@@ -679,7 +679,7 @@
         if (section === "conversations") loadConversations();
         if (section === "business") loadBusiness();
         if (section === "contacts") loadContacts();
-        if (section === "embed") { loadEmbedTexts(); updateEmbed(); }
+        if (section === "embed") { loadBusiness().then(() => { loadEmbedTexts(); updateEmbed(); }); }
       });
     });
 
