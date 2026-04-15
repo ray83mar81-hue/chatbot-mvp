@@ -40,7 +40,7 @@ def _build_button(
 
 
 def _get_or_create_conversation(
-    db: Session, session_id: str, business_id: int
+    db: Session, session_id: str, business_id: int, language: str = "es"
 ) -> Conversation:
     """Find existing active conversation or create a new one."""
     conversation = (
@@ -57,10 +57,15 @@ def _get_or_create_conversation(
             session_id=session_id,
             business_id=business_id,
             status="active",
+            language_code=language,
         )
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
+    elif conversation.language_code != language:
+        # User switched language mid-conversation — track the latest one
+        conversation.language_code = language
+        db.commit()
     return conversation
 
 
@@ -90,7 +95,7 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
 
     # Get or create conversation
     conversation = _get_or_create_conversation(
-        db, request.session_id, request.business_id
+        db, request.session_id, request.business_id, language
     )
 
     # Save user message
@@ -174,7 +179,7 @@ async def process_message_stream(request: ChatRequest, db: Session):
 
     language = _resolve_language(request.language, business)
 
-    conversation = _get_or_create_conversation(db, request.session_id, request.business_id)
+    conversation = _get_or_create_conversation(db, request.session_id, request.business_id, language)
 
     user_msg = Message(conversation_id=conversation.id, role="user", content=request.message)
     db.add(user_msg)

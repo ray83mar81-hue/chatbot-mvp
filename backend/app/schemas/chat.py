@@ -40,6 +40,7 @@ class ConversationResponse(BaseModel):
     id: int
     session_id: str
     status: str
+    language_code: str = "es"
     started_at: datetime
     ended_at: datetime | None
     messages: list[MessageResponse] = []
@@ -51,8 +52,28 @@ class ConversationListResponse(BaseModel):
     id: int
     session_id: str
     status: str
+    language_code: str = "es"
     started_at: datetime
     message_count: int
     last_message: str | None
 
     model_config = {"from_attributes": True}
+
+
+class TranslateConversationRequest(BaseModel):
+    target_language: str | None = None  # defaults to business.default_language
+
+
+class TranslatedMessage(BaseModel):
+    id: int
+    role: str
+    content: str  # translated
+    source: str | None = None
+    created_at: datetime
+
+
+class TranslateConversationResponse(BaseModel):
+    conversation_id: int
+    source_language: str
+    target_language: str
+    messages: list[TranslatedMessage]

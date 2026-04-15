@@ -12,6 +12,7 @@ class Conversation(Base):
     business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
     session_id = Column(String(100), nullable=False, index=True)
     status = Column(String(20), default="active")  # "active" | "closed"
+    language_code = Column(String(5), default="es")  # language the user chatted in
     started_at = Column(DateTime, server_default=func.now())
     ended_at = Column(DateTime, nullable=True)
 

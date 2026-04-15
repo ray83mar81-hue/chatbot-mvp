@@ -296,7 +296,7 @@
         <div class="page-header"><h2>Conversaciones</h2></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Sesion</th><th>Mensajes</th><th>Ultimo mensaje</th><th>Fecha</th><th></th></tr></thead>
+            <thead><tr><th>ID</th><th>Sesion</th><th>Idioma</th><th>Mensajes</th><th>Ultimo mensaje</th><th>Fecha</th><th></th></tr></thead>
             <tbody id="conversationsBody"></tbody>
           </table>
         </div>
@@ -608,7 +608,10 @@
   <!-- ═══════ MODAL: Conversation detail ═══════ -->
   <div class="modal-overlay" id="convModal">
     <div class="modal" style="width:600px">
-      <h3>Detalle de conversacion</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="margin:0">Detalle de conversacion <span id="convLangBadge" style="font-size:12px;font-weight:500;background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:4px;margin-left:8px"></span></h3>
+        <button class="btn btn-sm" id="convTranslateBtn" style="background:#e5e7eb;color:#1f2937;display:none" onclick="translateCurrentConversation()">Traducir al idioma por defecto</button>
+      </div>
       <div class="chat-history" id="convMessages"></div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeConvModal()">Cerrar</button>
@@ -1115,16 +1118,18 @@
         const tbody = document.getElementById("conversationsBody");
 
         if (convs.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">No hay conversaciones</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">No hay conversaciones</td></tr>`;
           return;
         }
 
         tbody.innerHTML = convs.map((c) => {
           const date = new Date(c.started_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
           const last = c.last_message ? (c.last_message.length > 50 ? c.last_message.slice(0, 50) + "..." : c.last_message) : "-";
+          const lang = (c.language_code || "es").toUpperCase();
           return `<tr>
             <td>#${c.id}</td>
             <td style="font-family:monospace;font-size:12px">${esc(c.session_id).slice(0, 16)}...</td>
+            <td><span class="badge" style="background:#e0e7ff;color:#3730a3">${lang}</span></td>
             <td>${c.message_count}</td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(last)}</td>
             <td>${date}</td>
@@ -1136,29 +1141,88 @@
       }
     }
 
+    let currentConv = null;  // the last conversation loaded in the modal
+
+    function renderConvMessages(messages, translated) {
+      const el = document.getElementById("convMessages");
+      el.innerHTML = messages.map((m) => {
+        const time = new Date(m.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+        const sourceTag = m.source ? ` <span class="badge ${m.source === 'intent' ? 'badge-intent' : 'badge-ai'}">${m.source}</span>` : "";
+        const tIcon = translated ? ' 🌐' : "";
+        return `<div class="chat-msg ${m.role}">
+          ${esc(m.content)}
+          <div class="meta">${time}${sourceTag}${tIcon}</div>
+        </div>`;
+      }).join("");
+    }
+
     async function viewConversation(id) {
       try {
         const res = await fetch(`${API}/conversations/${id}`);
         const conv = await res.json();
-        const el = document.getElementById("convMessages");
+        currentConv = conv;
 
-        el.innerHTML = conv.messages.map((m) => {
-          const time = new Date(m.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-          const sourceTag = m.source ? ` <span class="badge ${m.source === 'intent' ? 'badge-intent' : 'badge-ai'}">${m.source}</span>` : "";
-          return `<div class="chat-msg ${m.role}">
-            ${esc(m.content)}
-            <div class="meta">${time}${sourceTag}</div>
-          </div>`;
-        }).join("");
+        const lang = (conv.language_code || "es").toUpperCase();
+        document.getElementById("convLangBadge").textContent = lang;
 
+        const defaultLang = (bizDataState.defaultLang || "es");
+        const btn = document.getElementById("convTranslateBtn");
+        if (conv.language_code && conv.language_code !== defaultLang) {
+          btn.style.display = "inline-flex";
+          btn.disabled = false;
+          btn.innerHTML = `Traducir a ${defaultLang.toUpperCase()}`;
+          btn.dataset.mode = "translate";
+        } else {
+          btn.style.display = "none";
+        }
+
+        renderConvMessages(conv.messages, false);
         document.getElementById("convModal").classList.add("open");
       } catch (e) {
         console.error("viewConversation", e);
       }
     }
 
+    async function translateCurrentConversation() {
+      if (!currentConv) return;
+      const btn = document.getElementById("convTranslateBtn");
+
+      // Toggle: if currently showing translated, switch back to original
+      if (btn.dataset.mode === "original") {
+        renderConvMessages(currentConv.messages, false);
+        const defaultLang = (bizDataState.defaultLang || "es").toUpperCase();
+        btn.innerHTML = `Traducir a ${defaultLang}`;
+        btn.dataset.mode = "translate";
+        return;
+      }
+
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Traduciendo...';
+
+      try {
+        const res = await fetch(`${API}/conversations/${currentConv.id}/translate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),  // uses business default_language as target
+        });
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.detail || "Error"); }
+        const data = await res.json();
+
+        renderConvMessages(data.messages, true);
+        btn.innerHTML = "Ver original";
+        btn.dataset.mode = "original";
+      } catch (e) {
+        alert("Error al traducir la conversación: " + e.message);
+        btn.innerHTML = original;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     function closeConvModal() {
       document.getElementById("convModal").classList.remove("open");
+      currentConv = null;
     }
 
     /* ════════════════════════════════════════════════

@@ -76,6 +76,8 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "widget_ui_texts", "TEXT DEFAULT '{}'"),
     # Widget design (color, position, width, height, icon_type, bubble_emoji, bubble_image)
     ("businesses", "widget_design", "TEXT DEFAULT '{}'"),
+    # Language of the conversation (for admin to see + translate to default)
+    ("conversations", "language_code", "VARCHAR(5) DEFAULT 'es'"),
 ]
 
 
