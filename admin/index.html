@@ -877,18 +877,21 @@
     }
 
     function captureCurrentTab() {
-      // Save the values from the currently visible pane back into intentState.translations
-      const pane = document.querySelector(`.lang-pane.active`);
+      // Save the values from the currently visible pane back into intentState.translations.
+      // Scope the query to the intent panes container — a global selector would match
+      // any .lang-pane.active (business, widget, contact) and capture wrong data.
+      const pane = document.querySelector("#intentLangPanes .lang-pane.active");
       if (!pane) return;
       const code = pane.dataset.lang;
-      const kw = pane.querySelector(".ti-keywords").value
-        .split(",").map(k => k.trim()).filter(Boolean);
-      const response = pane.querySelector(".ti-response").value;
-      const button_label = pane.querySelector(".ti-button-label").value.trim();
+      const kwInput = pane.querySelector(".ti-keywords");
+      const respInput = pane.querySelector(".ti-response");
+      const btnInput = pane.querySelector(".ti-button-label");
+      if (!kwInput || !respInput || !btnInput) return;
+      const kw = kwInput.value.split(",").map(k => k.trim()).filter(Boolean);
       const t = intentState.translations[code] || emptyTranslation();
       t.keywords = JSON.stringify(kw);
-      t.response = response;
-      t.button_label = button_label;
+      t.response = respInput.value;
+      t.button_label = btnInput.value.trim();
       intentState.translations[code] = t;
     }
 
