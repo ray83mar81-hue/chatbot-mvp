@@ -1610,6 +1610,17 @@
       currentTab: null,
     };
 
+    // Default widget UI texts per language (used as pre-fill values).
+    const WIDGET_TEXT_DEFAULTS = {
+      es: { title: "Chat", subtitle: "Te responderemos al instante", welcome: "Hola, ¿en qué puedo ayudarte?", placeholder: "Escribe tu mensaje..." },
+      en: { title: "Chat", subtitle: "We'll reply right away", welcome: "Hi! How can I help you?", placeholder: "Type your message..." },
+      ca: { title: "Xat", subtitle: "Et respondrem de seguida", welcome: "Hola! En què et puc ajudar?", placeholder: "Escriu el teu missatge..." },
+      fr: { title: "Chat", subtitle: "Nous répondrons immédiatement", welcome: "Bonjour ! Comment puis-je vous aider ?", placeholder: "Écrivez votre message..." },
+      de: { title: "Chat", subtitle: "Wir antworten sofort", welcome: "Hallo! Wie kann ich Ihnen helfen?", placeholder: "Schreiben Sie Ihre Nachricht..." },
+      it: { title: "Chat", subtitle: "Ti risponderemo subito", welcome: "Ciao! Come posso aiutarti?", placeholder: "Scrivi il tuo messaggio..." },
+      pt: { title: "Chat", subtitle: "Responderemos imediatamente", welcome: "Olá! Como posso ajudar?", placeholder: "Escreva sua mensagem..." },
+    };
+
     function emptyWidgetUITexts() {
       return { title: "", subtitle: "", placeholder: "" };
     }
@@ -1635,6 +1646,11 @@
         const isDefault = code === bizLangState.defaultLang;
         const ui = bizWidgetState.uiTexts[code] || emptyWidgetUITexts();
         const welcome = bizLangState.welcomes[code] || "";
+        const defaults = WIDGET_TEXT_DEFAULTS[code] || WIDGET_TEXT_DEFAULTS.es;
+        const titleVal = ui.title || defaults.title;
+        const subtitleVal = ui.subtitle || defaults.subtitle;
+        const welcomeVal = welcome || defaults.welcome;
+        const placeholderVal = ui.placeholder || defaults.placeholder;
 
         // Tab
         const tab = document.createElement("button");
@@ -1651,19 +1667,19 @@
         pane.innerHTML = `
           <div class="form-group">
             <label>Título ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
-            <input class="wui-title" data-lang="${code}" value="${esc(ui.title)}" placeholder="Chat" />
+            <input class="wui-title" data-lang="${code}" value="${esc(titleVal)}" placeholder="${esc(defaults.title)}" />
           </div>
           <div class="form-group">
             <label>Subtítulo</label>
-            <input class="wui-subtitle" data-lang="${code}" value="${esc(ui.subtitle)}" placeholder="Te responderemos al instante" />
+            <input class="wui-subtitle" data-lang="${code}" value="${esc(subtitleVal)}" placeholder="${esc(defaults.subtitle)}" />
           </div>
           <div class="form-group">
             <label>Mensaje de bienvenida</label>
-            <textarea class="wui-welcome" data-lang="${code}" rows="2" placeholder="Hola, ¿en qué puedo ayudarte?">${esc(welcome)}</textarea>
+            <textarea class="wui-welcome" data-lang="${code}" rows="2" placeholder="${esc(defaults.welcome)}">${esc(welcomeVal)}</textarea>
           </div>
           <div class="form-group">
             <label>Placeholder del input</label>
-            <input class="wui-placeholder" data-lang="${code}" value="${esc(ui.placeholder)}" placeholder="Escribe tu mensaje..." />
+            <input class="wui-placeholder" data-lang="${code}" value="${esc(placeholderVal)}" placeholder="${esc(defaults.placeholder)}" />
           </div>
         `;
         panesEl.appendChild(pane);
