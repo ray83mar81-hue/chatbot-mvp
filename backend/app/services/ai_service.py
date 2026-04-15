@@ -1,6 +1,17 @@
+"""
+AI service with dual provider support (OpenAI-compatible + Anthropic).
+
+The OpenAI-compatible path works with OpenRouter, OpenAI, Groq, Together, etc.
+and unlocks cheaper models (gpt-4o-mini, gemini-2.5-flash, llama-3.3).
+The Anthropic path is kept for Claude-only deployments.
+
+Switch via AI_PROVIDER env var.
+"""
 import json
+from typing import AsyncIterator
 
 import anthropic
+import openai
 
 from app.config import settings
 from app.models.business import Business
@@ -59,11 +70,56 @@ def _build_messages(conversation_history: list[Message], user_message: str) -> l
     return messages
 
 
-def _get_client() -> anthropic.AsyncAnthropic:
-    client_kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
+# ── Clients ───────────────────────────────────────────────────────────────
+
+def _use_openai() -> bool:
+    return (settings.AI_PROVIDER or "openai").lower() == "openai"
+
+
+def _get_openai_client() -> openai.AsyncOpenAI:
+    return openai.AsyncOpenAI(
+        api_key=settings.OPENAI_API_KEY or settings.ANTHROPIC_API_KEY,
+        base_url=settings.OPENAI_BASE_URL or None,
+    )
+
+
+def _get_anthropic_client() -> anthropic.AsyncAnthropic:
+    kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
     if settings.ANTHROPIC_BASE_URL:
-        client_kwargs["base_url"] = settings.ANTHROPIC_BASE_URL
-    return anthropic.AsyncAnthropic(**client_kwargs)
+        kwargs["base_url"] = settings.ANTHROPIC_BASE_URL
+    return anthropic.AsyncAnthropic(**kwargs)
+
+
+def _get_client():
+    """Legacy export used by other services for simple JSON tasks.
+    Returns the provider-appropriate client.
+    """
+    if _use_openai():
+        return _get_openai_client()
+    return _get_anthropic_client()
+
+
+# ── High-level calls ──────────────────────────────────────────────────────
+
+async def _openai_chat(system: str, messages: list[dict], max_tokens: int = 500) -> str:
+    client = _get_openai_client()
+    resp = await client.chat.completions.create(
+        model=settings.AI_MODEL,
+        max_tokens=max_tokens,
+        messages=[{"role": "system", "content": system}] + messages,
+    )
+    return resp.choices[0].message.content or ""
+
+
+async def _anthropic_chat(system: str, messages: list[dict], max_tokens: int = 500) -> str:
+    client = _get_anthropic_client()
+    resp = await client.messages.create(
+        model=settings.AI_MODEL,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+    )
+    return resp.content[0].text
 
 
 async def generate_ai_response(
@@ -72,19 +128,14 @@ async def generate_ai_response(
     user_message: str,
     language: str = "es",
 ) -> str:
-    """Generate a response using Claude API (direct or via OpenRouter)."""
-    client = _get_client()
+    """Generate a response using the configured provider (OpenAI or Anthropic)."""
     system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
     try:
-        response = await client.messages.create(
-            model=settings.AI_MODEL,
-            max_tokens=500,
-            system=system_prompt,
-            messages=messages,
-        )
-        return response.content[0].text
+        if _use_openai():
+            return await _openai_chat(system_prompt, messages)
+        return await _anthropic_chat(system_prompt, messages)
     except Exception as e:
         print(f"[AI Error] {type(e).__name__}: {e}")
         return (
@@ -98,24 +149,64 @@ async def stream_ai_response(
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
-):
-    """Yield text chunks from Claude API stream."""
-    client = _get_client()
+) -> AsyncIterator[str]:
+    """Yield text chunks from the configured provider's streaming API."""
     system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
     try:
-        async with client.messages.stream(
-            model=settings.AI_MODEL,
-            max_tokens=500,
-            system=system_prompt,
-            messages=messages,
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
+        if _use_openai():
+            client = _get_openai_client()
+            stream = await client.chat.completions.create(
+                model=settings.AI_MODEL,
+                max_tokens=500,
+                messages=[{"role": "system", "content": system_prompt}] + messages,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    yield delta
+        else:
+            client = _get_anthropic_client()
+            async with client.messages.stream(
+                model=settings.AI_MODEL,
+                max_tokens=500,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
     except Exception as e:
         print(f"[AI Stream Error] {type(e).__name__}: {e}")
         yield (
             f"Lo siento, no puedo responder a eso ahora mismo. "
             f"Puedes contactarnos en {business.phone} o {business.email}."
         )
+
+
+# ── JSON-only helper used by translation services ────────────────────────
+
+async def chat_json(system: str, user: str, max_tokens: int = 2000) -> str:
+    """One-shot call for translation services that need raw text back.
+    Uses the configured provider. Returns the raw assistant message string.
+    """
+    if _use_openai():
+        client = _get_openai_client()
+        resp = await client.chat.completions.create(
+            model=settings.AI_MODEL,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return resp.choices[0].message.content or ""
+    client = _get_anthropic_client()
+    resp = await client.messages.create(
+        model=settings.AI_MODEL,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    return resp.content[0].text

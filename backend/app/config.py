@@ -3,11 +3,21 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:pass@localhost:5432/chatbot"
-    AI_PROVIDER: str = "anthropic"  # "anthropic" or "openai"
+
+    # AI provider selection. "openai" uses the OpenAI-compatible endpoint
+    # (works with OpenRouter, Together, Groq, or OpenAI directly) and unlocks
+    # cheaper models like gpt-4o-mini, gemini-2.5-flash, llama-3.3.
+    # "anthropic" keeps the legacy Anthropic SDK path for Claude-only access.
+    AI_PROVIDER: str = "openai"  # "openai" | "anthropic"
+    AI_MODEL: str = "openai/gpt-4o-mini"
+
+    # OpenAI / OpenRouter
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+    # Anthropic (legacy path)
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_BASE_URL: str = ""
-    OPENAI_API_KEY: str = ""
-    AI_MODEL: str = "anthropic/claude-sonnet-4"
     JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 1440  # 24 hours

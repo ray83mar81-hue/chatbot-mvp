@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
 from app.models.business import Business
 from app.models.conversation import Conversation
@@ -17,7 +16,7 @@ from app.schemas.chat import (
     TranslateConversationResponse,
     TranslatedMessage,
 )
-from app.services.ai_service import _get_client
+from app.services.ai_service import chat_json
 from app.services.translation_service import TranslationError, _extract_json
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -154,15 +153,12 @@ Input messages:
 {json.dumps(payload, ensure_ascii=False)}
 """
 
-    client = _get_client()
     try:
-        response = await client.messages.create(
-            model=settings.AI_MODEL,
-            max_tokens=4000,
+        raw_text = await chat_json(
             system="You are a professional translator. Reply with valid JSON only.",
-            messages=[{"role": "user", "content": prompt}],
+            user=prompt,
+            max_tokens=4000,
         )
-        raw_text = response.content[0].text
     except Exception as e:
         raise HTTPException(
             status_code=502,

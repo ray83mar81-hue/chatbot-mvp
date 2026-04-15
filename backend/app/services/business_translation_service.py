@@ -3,11 +3,10 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation
 from app.models.language import Language
-from app.services.ai_service import _get_client
+from app.services.ai_service import chat_json
 from app.services.translation_service import TranslationError, _extract_json
 
 
@@ -121,15 +120,12 @@ async def translate_business(
         targets=targets,
     )
 
-    client = _get_client()
     try:
-        response = await client.messages.create(
-            model=settings.AI_MODEL,
-            max_tokens=2000,
+        raw_text = await chat_json(
             system="You are a professional translator. Reply with valid JSON only.",
-            messages=[{"role": "user", "content": prompt}],
+            user=prompt,
+            max_tokens=2000,
         )
-        raw_text = response.content[0].text
     except Exception as e:
         raise TranslationError(f"AI request failed: {type(e).__name__}: {e}") from e
 
