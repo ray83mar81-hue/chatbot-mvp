@@ -17,6 +17,27 @@
     bubbleImage: script?.getAttribute("data-bubble-image") || "",
   };
 
+  // Fetch design from backend synchronously so CSS/HTML are generated with the
+  // admin-configured values. Falls back to data-* attributes if backend is down.
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", `${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`, false);
+    xhr.send();
+    if (xhr.status === 200) {
+      const data = JSON.parse(xhr.responseText);
+      const d = data.widget_design || {};
+      if (d.color) CONFIG.primaryColor = d.color;
+      if (d.position) CONFIG.position = d.position;
+      if (d.width) CONFIG.width = String(d.width);
+      if (d.height) CONFIG.height = String(d.height);
+      if (d.bubble_emoji) CONFIG.bubbleEmoji = d.bubble_emoji;
+      if (d.bubble_image) CONFIG.bubbleImage = d.bubble_image;
+      if (d.icon_type === "default") { CONFIG.bubbleEmoji = ""; CONFIG.bubbleImage = ""; }
+      // Cache the fetched payload so init() doesn't refetch
+      window.__cwBootstrap = data;
+    }
+  } catch (e) { /* backend unavailable — use data-* attributes */ }
+
   /* ── i18n: hardcoded UI strings ────────────────────────────── */
   const I18N = {
     es: {
@@ -685,9 +706,15 @@
   async function init() {
     if (state.initialized) return;
     try {
-      const res = await fetch(`${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`);
-      if (res.ok) {
-        const data = await res.json();
+      let data;
+      if (window.__cwBootstrap) {
+        data = window.__cwBootstrap;
+        delete window.__cwBootstrap;
+      } else {
+        const res = await fetch(`${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`);
+        if (res.ok) data = await res.json();
+      }
+      if (data) {
         state.supportedLangs = data.supported || [];
         state.welcomeMessages = data.welcome_messages || {};
         state.widgetUITexts = data.widget_ui_texts || {};

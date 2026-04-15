@@ -23,6 +23,8 @@ class Business(Base):
     welcome_messages = Column(Text, default="{}")  # JSON {lang_code: welcome_text}
     # {lang_code: {title, subtitle, placeholder}} — UI texts of the widget
     widget_ui_texts = Column(Text, default="{}")
+    # {color, position, width, height, icon_type, bubble_emoji, bubble_image}
+    widget_design = Column(Text, default="{}")
 
     # Contact form
     contact_form_enabled = Column(Boolean, default=False)

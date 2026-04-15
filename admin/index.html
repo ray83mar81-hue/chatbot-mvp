@@ -478,6 +478,12 @@
               <label>URL de la imagen (recomendado: 60x60px, PNG/SVG)</label>
               <input id="embedImageUrl" placeholder="https://..." oninput="updateEmbed()" />
             </div>
+
+            <div id="embedDesignMsg" style="display:none;margin-top:16px"></div>
+            <div style="display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;align-items:center">
+              <button class="btn btn-primary" onclick="saveWidgetDesign()">Guardar diseño</button>
+              <a href="/widget/preview.html" target="_blank" class="btn" style="background:#e5e7eb;color:#1f2937;text-decoration:none">Ver demo</a>
+            </div>
           </div>
 
           <!-- Code output -->
@@ -1196,6 +1202,7 @@
         bizLangState.defaultLang = langsData.default_language || "es";
         bizLangState.welcomes = langsData.welcome_messages || {};
         bizWidgetState.uiTexts = langsData.widget_ui_texts || {};
+        bizWidgetState.design = langsData.widget_design || {};
         // Merge welcomes from BusinessTranslation rows (they take priority)
         translations.forEach(t => {
           if (t.welcome) bizLangState.welcomes[t.language_code] = t.welcome;
@@ -1595,10 +1602,11 @@
       sel.onchange = () => { bizLangState.defaultLang = sel.value; };
     }
 
-    // Widget UI texts state (title, subtitle, placeholder per language).
+    // Widget UI texts state (title, subtitle, placeholder per language) + design.
     // welcome is kept in bizLangState.welcomes for backwards compat.
     const bizWidgetState = {
       uiTexts: {},        // {lang: {title, subtitle, placeholder}}
+      design: {},         // {color, position, width, height, icon_type, bubble_emoji, bubble_image}
       currentTab: null,
     };
 
@@ -2272,7 +2280,55 @@
         };
       });
 
+      // Load saved design into the form inputs
+      const d = bizWidgetState.design || {};
+      if (d.color) {
+        document.getElementById("embedColor").value = d.color;
+        document.getElementById("embedColorText").value = d.color;
+      }
+      if (d.position) document.getElementById("embedPosition").value = d.position;
+      if (d.width) document.getElementById("embedWidth").value = d.width;
+      if (d.height) document.getElementById("embedHeight").value = d.height;
+      if (d.icon_type) document.getElementById("embedIconType").value = d.icon_type;
+      if (d.bubble_emoji) document.getElementById("embedEmoji").value = d.bubble_emoji;
+      if (d.bubble_image) document.getElementById("embedImageUrl").value = d.bubble_image;
+
       renderEmbedLangTabs();
+    }
+
+    async function saveWidgetDesign() {
+      const msgEl = document.getElementById("embedDesignMsg");
+      msgEl.style.display = "none";
+
+      const design = {
+        color: document.getElementById("embedColor").value,
+        position: document.getElementById("embedPosition").value,
+        width: parseInt(document.getElementById("embedWidth").value, 10) || 380,
+        height: parseInt(document.getElementById("embedHeight").value, 10) || 540,
+        icon_type: document.getElementById("embedIconType").value,
+        bubble_emoji: document.getElementById("embedEmoji").value,
+        bubble_image: document.getElementById("embedImageUrl").value,
+      };
+
+      try {
+        const res = await fetch(`${API}/business/${businessId}/languages`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ widget_design: design }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "Error al guardar");
+        }
+        bizWidgetState.design = design;
+        msgEl.textContent = "Diseño guardado correctamente. Recarga la página donde tengas el widget para ver los cambios.";
+        msgEl.className = "success-msg";
+        msgEl.style.display = "block";
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
     }
 
     function renderEmbedLangTabs() {

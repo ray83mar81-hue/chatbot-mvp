@@ -19,6 +19,17 @@ class WidgetUITexts(BaseModel):
     placeholder: str = ""
 
 
+class WidgetDesign(BaseModel):
+    """Global widget appearance (not per-language)."""
+    color: str = "#2563eb"
+    position: str = "right"            # "right" | "left"
+    width: int = 380
+    height: int = 540
+    icon_type: str = "default"         # "default" | "emoji" | "image"
+    bubble_emoji: str = ""
+    bubble_image: str = ""
+
+
 class BusinessLanguagesResponse(BaseModel):
     """Public payload the widget uses to render the language selector."""
     business_id: int
@@ -26,6 +37,7 @@ class BusinessLanguagesResponse(BaseModel):
     supported: list[LanguageResponse]              # full metadata of supported langs
     welcome_messages: dict[str, str] = {}          # {lang_code: welcome_text}
     widget_ui_texts: dict[str, WidgetUITexts] = {}  # {lang_code: {title, subtitle, placeholder}}
+    widget_design: WidgetDesign = WidgetDesign()
 
 
 class BusinessLanguagesUpdate(BaseModel):
@@ -34,3 +46,4 @@ class BusinessLanguagesUpdate(BaseModel):
     default_language: str | None = None
     welcome_messages: dict[str, str] | None = None
     widget_ui_texts: dict[str, WidgetUITexts] | None = None
+    widget_design: WidgetDesign | None = None

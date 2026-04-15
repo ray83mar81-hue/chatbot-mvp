@@ -74,6 +74,8 @@ SCHEMA_MIGRATIONS = [
     ("business_translations", "contact_texts", "TEXT DEFAULT '{}'"),
     # Widget UI texts (title, subtitle, placeholder per language)
     ("businesses", "widget_ui_texts", "TEXT DEFAULT '{}'"),
+    # Widget design (color, position, width, height, icon_type, bubble_emoji, bubble_image)
+    ("businesses", "widget_design", "TEXT DEFAULT '{}'"),
 ]
 
 

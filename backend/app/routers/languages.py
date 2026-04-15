@@ -59,6 +59,13 @@ def get_business_languages(business_id: int, db: Session = Depends(get_db)):
     except json.JSONDecodeError:
         ui_texts = {}
 
+    try:
+        design = json.loads(business.widget_design or "{}")
+        if not isinstance(design, dict):
+            design = {}
+    except json.JSONDecodeError:
+        design = {}
+
     languages = (
         db.query(Language)
         .filter(Language.code.in_(codes), Language.is_active.is_(True))
@@ -76,6 +83,7 @@ def get_business_languages(business_id: int, db: Session = Depends(get_db)):
         supported=ordered,
         welcome_messages=welcomes,
         widget_ui_texts=ui_texts,
+        widget_design=design,
     )
 
 
@@ -133,6 +141,9 @@ def update_business_languages(
     if data.widget_ui_texts is not None:
         ui_dict = {k: v.model_dump() for k, v in data.widget_ui_texts.items()}
         business.widget_ui_texts = json.dumps(ui_dict, ensure_ascii=False)
+
+    if data.widget_design is not None:
+        business.widget_design = json.dumps(data.widget_design.model_dump(), ensure_ascii=False)
 
     db.commit()
     db.refresh(business)
