@@ -21,6 +21,8 @@ class Business(Base):
     supported_languages = Column(Text, default='["es"]')  # JSON list of language codes
     default_language = Column(String(5), default="es")
     welcome_messages = Column(Text, default="{}")  # JSON {lang_code: welcome_text}
+    # {lang_code: {title, subtitle, placeholder}} — UI texts of the widget
+    widget_ui_texts = Column(Text, default="{}")
 
     # Contact form
     contact_form_enabled = Column(Boolean, default=False)

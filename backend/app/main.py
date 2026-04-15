@@ -72,6 +72,8 @@ SCHEMA_MIGRATIONS = [
     ("business_translations", "welcome", "TEXT DEFAULT ''"),
     ("business_translations", "privacy_url", "VARCHAR(500) DEFAULT ''"),
     ("business_translations", "contact_texts", "TEXT DEFAULT '{}'"),
+    # Widget UI texts (title, subtitle, placeholder per language)
+    ("businesses", "widget_ui_texts", "TEXT DEFAULT '{}'"),
 ]
 
 

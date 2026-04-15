@@ -480,7 +480,7 @@
           </form>
         </div>
       </div>
-      <div class="cw-powered">Powered by Chatbot MVP</div>
+      <div class="cw-powered">Powered by DPB Andorra</div>
     </div>
   `;
   document.body.appendChild(root);
@@ -492,6 +492,7 @@
   const messagesEl = root.querySelector(".cw-messages");
   const input = root.querySelector(".cw-input");
   const sendBtn = root.querySelector(".cw-send");
+  const titleEl = root.querySelector(".cw-header-info h3");
   const subtitleEl = root.querySelector(".cw-subtitle");
   const langWrap = root.querySelector(".cw-lang-wrap");
   const langBtn = root.querySelector(".cw-lang-btn");
@@ -589,10 +590,14 @@
   }
 
   function applyI18nToUI() {
-    input.placeholder = t("placeholder");
-    if (!CONFIG.subtitle) {
-      subtitleEl.textContent = t("subtitleDefault");
-    }
+    // Backend widget_ui_texts take priority over data-* attributes and defaults.
+    const ui = (state.widgetUITexts && state.widgetUITexts[state.currentLang]) || {};
+    if (ui.title) titleEl.textContent = ui.title;
+    else if (CONFIG.title) titleEl.textContent = CONFIG.title;
+    if (ui.subtitle) subtitleEl.textContent = ui.subtitle;
+    else if (CONFIG.subtitle) subtitleEl.textContent = CONFIG.subtitle;
+    else subtitleEl.textContent = t("subtitleDefault");
+    input.placeholder = ui.placeholder || t("placeholder");
     closeBtn.setAttribute("aria-label", t("changeLanguage"));
     langBtn.setAttribute("aria-label", t("changeLanguage"));
     langBtn.setAttribute("title", t("changeLanguage"));
@@ -685,6 +690,7 @@
         const data = await res.json();
         state.supportedLangs = data.supported || [];
         state.welcomeMessages = data.welcome_messages || {};
+        state.widgetUITexts = data.widget_ui_texts || {};
         state.defaultLang = data.default_language || "es";
         state.currentLang = pickInitialLanguage(state.supportedLangs, state.defaultLang);
       } else {

@@ -310,6 +310,7 @@
         <div class="lang-tabs" id="bizSubTabs" style="margin-bottom:20px">
           <button type="button" class="lang-tab active" data-biztab="datos" onclick="switchBizTab('datos')">Datos del negocio</button>
           <button type="button" class="lang-tab" data-biztab="idiomas" onclick="switchBizTab('idiomas')">Idiomas</button>
+          <button type="button" class="lang-tab" data-biztab="widget" onclick="switchBizTab('widget')">Widget</button>
           <button type="button" class="lang-tab" data-biztab="contacto" onclick="switchBizTab('contacto')">Formulario de contacto</button>
         </div>
 
@@ -345,19 +346,32 @@
 
             <div class="translate-bar" id="globalTranslateBar" style="display:none">
               <div class="translate-bar-text">
-                <strong>Traducir todo con IA</strong> — datos del negocio, bienvenida, formulario de contacto. Solo se traducirán los idiomas sin traducciones aprobadas.
+                <strong>Traducir todo con IA</strong> — datos del negocio, textos del widget, formulario de contacto. Solo se traducirán los idiomas sin traducciones aprobadas.
               </div>
               <button class="btn btn-primary btn-sm" id="globalTranslateBtn" onclick="translateAll()">Traducir con IA</button>
             </div>
             <div id="globalTranslateMsg" style="display:none;margin-bottom:14px"></div>
 
-            <div class="modal-section-title">Mensaje de bienvenida</div>
-            <p style="font-size:12px;color:#6b7280;margin-bottom:10px">Se muestra al abrir el widget. Si dejas un campo vacío, usará el genérico.</p>
-            <div class="lang-tabs" id="welcomeLangTabs"></div>
-            <div id="welcomeLangPanes"></div>
+            <p style="font-size:13px;color:#6b7280;margin-top:16px">Los textos del widget (título, subtítulo, bienvenida, placeholder) se configuran en la pestaña <strong>Widget</strong>.</p>
 
             <div id="bizLangMsg" style="display:none"></div>
             <button class="btn btn-primary" style="margin-top:12px" onclick="saveBusinessLanguages()">Guardar idiomas</button>
+          </div>
+        </div>
+
+        <!-- Sub-tab: Widget -->
+        <div class="biz-pane" id="bizPane-widget">
+          <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-width:720px">
+            <p style="font-size:13px;color:#6b7280;margin-bottom:16px">Textos que ve el usuario final en el widget de chat. Se guardan por idioma. Si dejas un campo vacío, se usará el texto predeterminado.</p>
+
+            <div class="lang-tabs" id="widgetTextLangTabs"></div>
+            <div id="widgetTextLangPanes"></div>
+
+            <div id="bizWidgetMsg" style="display:none;margin-top:12px"></div>
+            <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+              <button class="btn btn-primary" onclick="saveWidgetTexts()">Guardar textos</button>
+              <a href="/widget/preview.html" target="_blank" class="btn" style="background:#e5e7eb;color:#1f2937;text-decoration:none">Ver demo</a>
+            </div>
           </div>
         </div>
 
@@ -1181,6 +1195,7 @@
         bizLangState.supported = (langsData.supported || []).map(l => l.code);
         bizLangState.defaultLang = langsData.default_language || "es";
         bizLangState.welcomes = langsData.welcome_messages || {};
+        bizWidgetState.uiTexts = langsData.widget_ui_texts || {};
         // Merge welcomes from BusinessTranslation rows (they take priority)
         translations.forEach(t => {
           if (t.welcome) bizLangState.welcomes[t.language_code] = t.welcome;
@@ -1225,7 +1240,7 @@
         // 5) Populate "Idiomas" tab
         renderLangChips();
         renderDefaultLangSelect();
-        renderWelcomeFields();
+        renderWidgetTextFields();
 
         // 6) Populate "Formulario de contacto" tab
         document.getElementById("bizContactEnabled").checked = !!b.contact_form_enabled;
@@ -1366,7 +1381,7 @@
       try {
         // Save current source data first
         captureBizDataTab();
-        captureWelcomeTab();
+        captureWidgetTextTab();
 
         const defaultT = bizDataState.translations[srcLang];
         if (defaultT) {
@@ -1446,7 +1461,7 @@
 
         // Re-render everything
         renderBizDataTabs();
-        renderWelcomeFields();
+        renderWidgetTextFields();
         renderContactLangTabs();
         if (typeof renderEmbedLangTabs === "function") renderEmbedLangTabs();
 
@@ -1551,7 +1566,7 @@
           }
           renderLangChips();
           renderDefaultLangSelect();
-          renderWelcomeFields();
+          renderWidgetTextFields();
         });
         wrap.appendChild(chip);
       });
@@ -1571,33 +1586,45 @@
       sel.onchange = () => { bizLangState.defaultLang = sel.value; };
     }
 
-    let welcomeCurrentTab = null;
+    // Widget UI texts state (title, subtitle, placeholder per language).
+    // welcome is kept in bizLangState.welcomes for backwards compat.
+    const bizWidgetState = {
+      uiTexts: {},        // {lang: {title, subtitle, placeholder}}
+      currentTab: null,
+    };
 
-    function renderWelcomeFields() {
-      const tabsEl = document.getElementById("welcomeLangTabs");
-      const panesEl = document.getElementById("welcomeLangPanes");
+    function emptyWidgetUITexts() {
+      return { title: "", subtitle: "", placeholder: "" };
+    }
+
+    function renderWidgetTextFields() {
+      const tabsEl = document.getElementById("widgetTextLangTabs");
+      const panesEl = document.getElementById("widgetTextLangPanes");
+      if (!tabsEl || !panesEl) return;
       tabsEl.innerHTML = "";
       panesEl.innerHTML = "";
 
       const supported = bizLangState.catalog.filter(l => bizLangState.supported.includes(l.code));
       if (supported.length === 0) {
-        panesEl.innerHTML = '<p style="color:#9ca3af;font-size:13px">Selecciona al menos un idioma arriba.</p>';
+        panesEl.innerHTML = '<p style="color:#9ca3af;font-size:13px">Selecciona al menos un idioma en la pestaña Idiomas.</p>';
         return;
       }
 
-      if (!welcomeCurrentTab) welcomeCurrentTab = bizLangState.defaultLang;
+      if (!bizWidgetState.currentTab) bizWidgetState.currentTab = bizLangState.defaultLang;
 
       supported.forEach(lang => {
         const code = lang.code;
-        const isActive = welcomeCurrentTab === code;
+        const isActive = bizWidgetState.currentTab === code;
         const isDefault = code === bizLangState.defaultLang;
+        const ui = bizWidgetState.uiTexts[code] || emptyWidgetUITexts();
+        const welcome = bizLangState.welcomes[code] || "";
 
         // Tab
         const tab = document.createElement("button");
         tab.type = "button";
         tab.className = "lang-tab" + (isActive ? " active" : "");
         tab.innerHTML = `<span>${esc(code.toUpperCase())}</span>`;
-        tab.addEventListener("click", () => { captureWelcomeTab(); welcomeCurrentTab = code; renderWelcomeFields(); });
+        tab.addEventListener("click", () => { captureWidgetTextTab(); bizWidgetState.currentTab = code; renderWidgetTextFields(); });
         tabsEl.appendChild(tab);
 
         // Pane
@@ -1606,23 +1633,78 @@
         pane.dataset.lang = code;
         pane.innerHTML = `
           <div class="form-group">
-            <label>Mensaje de bienvenida ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
-            <textarea class="wt-welcome" data-lang="${code}" rows="2" placeholder="Hola, ¿en qué puedo ayudarte?">${esc(bizLangState.welcomes[code] || "")}</textarea>
+            <label>Título ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
+            <input class="wui-title" data-lang="${code}" value="${esc(ui.title)}" placeholder="Chat" />
+          </div>
+          <div class="form-group">
+            <label>Subtítulo</label>
+            <input class="wui-subtitle" data-lang="${code}" value="${esc(ui.subtitle)}" placeholder="Te responderemos al instante" />
+          </div>
+          <div class="form-group">
+            <label>Mensaje de bienvenida</label>
+            <textarea class="wui-welcome" data-lang="${code}" rows="2" placeholder="Hola, ¿en qué puedo ayudarte?">${esc(welcome)}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Placeholder del input</label>
+            <input class="wui-placeholder" data-lang="${code}" value="${esc(ui.placeholder)}" placeholder="Escribe tu mensaje..." />
           </div>
         `;
         panesEl.appendChild(pane);
       });
     }
 
-    function captureWelcomeTab() {
-      const pane = document.querySelector("#welcomeLangPanes .lang-pane.active");
+    function captureWidgetTextTab() {
+      const pane = document.querySelector("#widgetTextLangPanes .lang-pane.active");
       if (!pane) return;
       const code = pane.dataset.lang;
-      bizLangState.welcomes[code] = pane.querySelector(".wt-welcome").value;
+      const ui = bizWidgetState.uiTexts[code] || emptyWidgetUITexts();
+      ui.title = pane.querySelector(".wui-title").value;
+      ui.subtitle = pane.querySelector(".wui-subtitle").value;
+      ui.placeholder = pane.querySelector(".wui-placeholder").value;
+      bizWidgetState.uiTexts[code] = ui;
+      bizLangState.welcomes[code] = pane.querySelector(".wui-welcome").value;
+    }
+
+    async function saveWidgetTexts() {
+      const msgEl = document.getElementById("bizWidgetMsg");
+      msgEl.style.display = "none";
+      captureWidgetTextTab();
+
+      try {
+        const res = await fetch(`${API}/business/${businessId}/languages`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            welcome_messages: bizLangState.welcomes,
+            widget_ui_texts: bizWidgetState.uiTexts,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || "Error al guardar");
+        }
+
+        // Also persist welcomes into BusinessTranslation rows so they survive
+        for (const code of bizLangState.supported) {
+          const welcome = bizLangState.welcomes[code] || "";
+          await fetch(`${API}/business/${businessId}/translations/${code}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ welcome }),
+          });
+        }
+
+        msgEl.textContent = "Textos guardados correctamente";
+        msgEl.className = "success-msg";
+        msgEl.style.display = "block";
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
     }
 
     async function translateWelcomes() {
-      captureWelcomeTab();
+      captureWidgetTextTab();
       const srcLang = bizLangState.defaultLang;
       const srcText = bizLangState.welcomes[srcLang];
       if (!srcText || !srcText.trim()) { alert("Escribe primero el mensaje de bienvenida en el idioma por defecto."); return; }
@@ -1651,7 +1733,7 @@
         data.forEach(t => {
           if (t.welcome) bizLangState.welcomes[t.language_code] = t.welcome;
         });
-        renderWelcomeFields();
+        renderWidgetTextFields();
       } catch (e) {
         alert("Error al traducir: " + e.message);
       } finally {
@@ -1663,7 +1745,7 @@
     async function saveBusinessLanguages() {
       const msgEl = document.getElementById("bizLangMsg");
       msgEl.style.display = "none";
-      captureWelcomeTab();
+      captureWidgetTextTab();
 
       if (bizLangState.supported.length === 0) {
         msgEl.textContent = "Selecciona al menos un idioma";
