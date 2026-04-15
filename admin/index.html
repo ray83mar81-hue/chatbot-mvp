@@ -1980,16 +1980,27 @@
 
     const CONTACT_TEXT_FIELDS = [
       { key: "contactTitle", label: "Título del formulario", placeholder: "Solicitar contacto" },
-      { key: "contactName", label: "Label: Nombre", placeholder: "Nombre" },
-      { key: "contactPhone", label: "Label: Teléfono", placeholder: "Teléfono" },
-      { key: "contactEmail", label: "Label: Email", placeholder: "Email" },
-      { key: "contactMessage", label: "Label: Mensaje", placeholder: "Mensaje" },
+      { key: "contactName", label: "Nombre", placeholder: "Nombre" },
+      { key: "contactPhone", label: "Teléfono", placeholder: "Teléfono" },
+      { key: "contactEmail", label: "Email", placeholder: "Email" },
+      { key: "contactMessage", label: "Mensaje", placeholder: "Mensaje" },
       { key: "contactWaConsent", label: "Texto consentimiento WhatsApp", placeholder: "Acepto comunicación por WhatsApp" },
       { key: "contactSend", label: "Botón enviar", placeholder: "Enviar solicitud" },
       { key: "contactSuccess", label: "Mensaje de éxito", placeholder: "Solicitud enviada correctamente..." },
       { key: "contactPrivacy", label: "Texto privacidad (antes del link)", placeholder: "He leído y acepto la" },
       { key: "contactPrivacyLink", label: "Texto del link de privacidad", placeholder: "política de privacidad" },
     ];
+
+    // Default texts per language — used to pre-fill empty fields on render.
+    const CONTACT_DEFAULTS_BY_LANG = {
+      es: { contactTitle: "Solicitar contacto", contactName: "Nombre", contactPhone: "Teléfono", contactEmail: "Email", contactMessage: "Mensaje", contactWaConsent: "Acepto la comunicación por WhatsApp", contactSend: "Enviar solicitud", contactSuccess: "Solicitud enviada correctamente. Nos pondremos en contacto pronto.", contactPrivacy: "He leído y acepto la", contactPrivacyLink: "política de privacidad" },
+      en: { contactTitle: "Request contact", contactName: "Name", contactPhone: "Phone", contactEmail: "Email", contactMessage: "Message", contactWaConsent: "I agree to be contacted via WhatsApp", contactSend: "Send request", contactSuccess: "Request sent successfully. We'll get back to you soon.", contactPrivacy: "I have read and accept the", contactPrivacyLink: "privacy policy" },
+      ca: { contactTitle: "Sol·licitar contacte", contactName: "Nom", contactPhone: "Telèfon", contactEmail: "Email", contactMessage: "Missatge", contactWaConsent: "Accepto la comunicació per WhatsApp", contactSend: "Enviar sol·licitud", contactSuccess: "Sol·licitud enviada. Ens posarem en contacte aviat.", contactPrivacy: "He llegit i accepto la", contactPrivacyLink: "política de privacitat" },
+      fr: { contactTitle: "Demande de contact", contactName: "Nom", contactPhone: "Téléphone", contactEmail: "Email", contactMessage: "Message", contactWaConsent: "J'accepte d'être contacté par WhatsApp", contactSend: "Envoyer la demande", contactSuccess: "Demande envoyée. Nous vous contacterons bientôt.", contactPrivacy: "J'ai lu et j'accepte la", contactPrivacyLink: "politique de confidentialité" },
+      de: { contactTitle: "Kontakt anfordern", contactName: "Name", contactPhone: "Telefon", contactEmail: "Email", contactMessage: "Nachricht", contactWaConsent: "Ich stimme der Kontaktaufnahme über WhatsApp zu", contactSend: "Anfrage senden", contactSuccess: "Anfrage gesendet. Wir melden uns bald.", contactPrivacy: "Ich habe die", contactPrivacyLink: "Datenschutzrichtlinie gelesen und akzeptiere sie" },
+      it: { contactTitle: "Richiedi contatto", contactName: "Nome", contactPhone: "Telefono", contactEmail: "Email", contactMessage: "Messaggio", contactWaConsent: "Accetto di essere contattato tramite WhatsApp", contactSend: "Invia richiesta", contactSuccess: "Richiesta inviata. Ti contatteremo presto.", contactPrivacy: "Ho letto e accetto la", contactPrivacyLink: "informativa sulla privacy" },
+      pt: { contactTitle: "Solicitar contacto", contactName: "Nome", contactPhone: "Telefone", contactEmail: "Email", contactMessage: "Mensagem", contactWaConsent: "Aceito ser contactado por WhatsApp", contactSend: "Enviar pedido", contactSuccess: "Pedido enviado. Entraremos em contacto brevemente.", contactPrivacy: "Li e aceito a", contactPrivacyLink: "política de privacidade" },
+    };
 
     function emptyContactTexts() {
       const o = { privacy_url: "" };
@@ -2056,10 +2067,13 @@
         pane.className = "lang-pane" + (isActive ? " active" : "");
         pane.dataset.lang = code;
 
-        let fieldsHtml = `<div class="form-group"><label>URL política de privacidad</label><input class="ct-privacy-url" data-lang="${code}" value="${esc(ct.privacy_url)}" placeholder="https://..." /></div>`;
+        const defaults = CONTACT_DEFAULTS_BY_LANG[code] || {};
+        let fieldsHtml = "";
         CONTACT_TEXT_FIELDS.forEach(f => {
-          fieldsHtml += `<div class="form-group"><label>${esc(f.label)}</label><input class="ct-${f.key}" data-lang="${code}" value="${esc(ct[f.key])}" placeholder="${esc(f.placeholder)}" /></div>`;
+          const value = ct[f.key] || defaults[f.key] || "";
+          fieldsHtml += `<div class="form-group"><label>${esc(f.label)}</label><input class="ct-${f.key}" data-lang="${code}" value="${esc(value)}" placeholder="${esc(f.placeholder)}" /></div>`;
         });
+        fieldsHtml += `<div class="form-group"><label>URL política de privacidad</label><input class="ct-privacy-url" data-lang="${code}" value="${esc(ct.privacy_url)}" placeholder="https://..." /></div>`;
         pane.innerHTML = fieldsHtml;
         panesEl.appendChild(pane);
       });
