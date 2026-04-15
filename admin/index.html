@@ -1415,9 +1415,10 @@
           if (t.welcome) bizLangState.welcomes[t.language_code] = t.welcome;
         });
 
-        // Also fill contact form texts and embed texts from defaults
+        // Also fill contact form texts, widget UI texts and embed texts from defaults
         const srcContact = contactFormState.translations[srcLang] || emptyContactTexts();
         const srcEmbed = embedTextState.translations ? (embedTextState.translations[srcLang] || emptyEmbedTexts()) : emptyEmbedTexts();
+        const srcWidgetUI = bizWidgetState.uiTexts[srcLang] || emptyWidgetUITexts();
 
         const I18N_CONTACT = {
           es: { contactTitle: 'Solicitar contacto', contactName: 'Nombre', contactPhone: 'Teléfono', contactEmail: 'Email', contactMessage: 'Mensaje', contactWaConsent: 'Acepto la comunicación por WhatsApp', contactSend: 'Enviar solicitud', contactSuccess: 'Solicitud enviada correctamente. Nos pondremos en contacto pronto.', contactPrivacy: 'He leído y acepto la', contactPrivacyLink: 'política de privacidad' },
@@ -1457,6 +1458,14 @@
             });
             embedTextState.translations[code] = et;
           }
+
+          // Widget UI texts (title, subtitle, placeholder)
+          const wui = bizWidgetState.uiTexts[code] || emptyWidgetUITexts();
+          const wuiDefaults = I18N_EMBED[code] || {};
+          ["title", "subtitle", "placeholder"].forEach(key => {
+            if (!wui[key]) wui[key] = wuiDefaults[key] || srcWidgetUI[key] || "";
+          });
+          bizWidgetState.uiTexts[code] = wui;
         });
 
         // Re-render everything
