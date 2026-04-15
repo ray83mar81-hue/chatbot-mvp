@@ -2407,7 +2407,8 @@
       panesEl.innerHTML = "";
 
       const langs = bizDataState.langs.length ? bizDataState.langs : [{ code: "es", native_name: "Español" }];
-      document.getElementById("embedTranslateBar").style.display = langs.length > 1 ? "flex" : "none";
+      const etb = document.getElementById("embedTranslateBar");
+      if (etb) etb.style.display = langs.length > 1 ? "flex" : "none";
 
       langs.forEach(lang => {
         const code = lang.code;
