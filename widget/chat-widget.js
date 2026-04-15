@@ -15,6 +15,9 @@
     height: script?.getAttribute("data-height") || "540",
     bubbleEmoji: script?.getAttribute("data-bubble-emoji") || "",
     bubbleImage: script?.getAttribute("data-bubble-image") || "",
+    headerAvatarType: "default",
+    headerAvatarEmoji: "",
+    headerAvatarImage: "",
   };
 
   // Fetch design from backend synchronously so CSS/HTML are generated with the
@@ -33,6 +36,9 @@
       if (d.bubble_emoji) CONFIG.bubbleEmoji = d.bubble_emoji;
       if (d.bubble_image) CONFIG.bubbleImage = d.bubble_image;
       if (d.icon_type === "default") { CONFIG.bubbleEmoji = ""; CONFIG.bubbleImage = ""; }
+      if (d.header_avatar_type) CONFIG.headerAvatarType = d.header_avatar_type;
+      if (d.header_avatar_emoji) CONFIG.headerAvatarEmoji = d.header_avatar_emoji;
+      if (d.header_avatar_image) CONFIG.headerAvatarImage = d.header_avatar_image;
       // Cache the fetched payload so init() doesn't refetch
       window.__cwBootstrap = data;
     }
@@ -451,7 +457,13 @@
     }</button>
     <div class="cw-window">
       <div class="cw-header">
-        <div class="cw-header-avatar">${ICON_BOT}</div>
+        <div class="cw-header-avatar">${
+          CONFIG.headerAvatarType === "image" && CONFIG.headerAvatarImage
+            ? `<img src="${escapeHtml(CONFIG.headerAvatarImage)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover" />`
+            : CONFIG.headerAvatarType === "emoji" && CONFIG.headerAvatarEmoji
+              ? `<span style="font-size:22px">${CONFIG.headerAvatarEmoji}</span>`
+              : ICON_BOT
+        }</div>
         <div class="cw-header-info">
           <h3>${escapeHtml(CONFIG.title)}</h3>
           <p class="cw-subtitle">${escapeHtml(CONFIG.subtitle)}</p>

@@ -28,6 +28,9 @@ class WidgetDesign(BaseModel):
     icon_type: str = "default"         # "default" | "emoji" | "image"
     bubble_emoji: str = ""
     bubble_image: str = ""
+    header_avatar_type: str = "default"  # "default" | "emoji" | "image"
+    header_avatar_emoji: str = ""
+    header_avatar_image: str = ""
 
 
 class BusinessLanguagesResponse(BaseModel):

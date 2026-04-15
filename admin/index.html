@@ -479,6 +479,25 @@
               <input id="embedImageUrl" placeholder="https://..." oninput="updateEmbed()" />
             </div>
 
+            <h3 style="font-size:16px;margin:20px 0 16px;padding-top:16px;border-top:1px solid #f3f4f6">Avatar de la cabecera</h3>
+            <p style="font-size:12px;color:#6b7280;margin-bottom:12px">Icono junto al título del chat (ej: logo de la empresa).</p>
+            <div class="form-group">
+              <label>Tipo de avatar</label>
+              <select id="embedAvatarType" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px" onchange="updateAvatarVisibility()">
+                <option value="default">Bot (por defecto)</option>
+                <option value="emoji">Emoji personalizado</option>
+                <option value="image">Imagen URL</option>
+              </select>
+            </div>
+            <div class="form-group" id="embedAvatarEmojiWrap" style="display:none">
+              <label>Emoji</label>
+              <input id="embedAvatarEmoji" value="🤖" style="font-size:24px;width:60px;text-align:center" />
+            </div>
+            <div class="form-group" id="embedAvatarImageWrap" style="display:none">
+              <label>URL de la imagen (recomendado: cuadrada, mín. 80x80px)</label>
+              <input id="embedAvatarImage" placeholder="https://..." />
+            </div>
+
             <div id="embedDesignMsg" style="display:none;margin-top:16px"></div>
             <div style="display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;align-items:center">
               <button class="btn btn-primary" onclick="saveWidgetDesign()">Guardar diseño</button>
@@ -2308,8 +2327,18 @@
       if (d.icon_type) document.getElementById("embedIconType").value = d.icon_type;
       if (d.bubble_emoji) document.getElementById("embedEmoji").value = d.bubble_emoji;
       if (d.bubble_image) document.getElementById("embedImageUrl").value = d.bubble_image;
+      if (d.header_avatar_type) document.getElementById("embedAvatarType").value = d.header_avatar_type;
+      if (d.header_avatar_emoji) document.getElementById("embedAvatarEmoji").value = d.header_avatar_emoji;
+      if (d.header_avatar_image) document.getElementById("embedAvatarImage").value = d.header_avatar_image;
+      updateAvatarVisibility();
 
       renderEmbedLangTabs();
+    }
+
+    function updateAvatarVisibility() {
+      const t = document.getElementById("embedAvatarType").value;
+      document.getElementById("embedAvatarEmojiWrap").style.display = t === "emoji" ? "block" : "none";
+      document.getElementById("embedAvatarImageWrap").style.display = t === "image" ? "block" : "none";
     }
 
     async function saveWidgetDesign() {
@@ -2324,6 +2353,9 @@
         icon_type: document.getElementById("embedIconType").value,
         bubble_emoji: document.getElementById("embedEmoji").value,
         bubble_image: document.getElementById("embedImageUrl").value,
+        header_avatar_type: document.getElementById("embedAvatarType").value,
+        header_avatar_emoji: document.getElementById("embedAvatarEmoji").value,
+        header_avatar_image: document.getElementById("embedAvatarImage").value,
       };
 
       try {
