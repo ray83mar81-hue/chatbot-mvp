@@ -1318,11 +1318,20 @@
         tabsEl.appendChild(tab);
 
         // Pane
+        const reTranslateBtn = !isDefault
+          ? `<button class="btn btn-sm" style="background:#e5e7eb;color:#1f2937" onclick="retranslateBizLanguage('${code}')">Re-traducir con IA</button>`
+          : "";
         const banner = t.needs_review
           ? `<div class="review-banner">
                <div class="review-banner-text"><svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg> Traducción generada con IA</div>
-               <button class="btn btn-secondary btn-sm" onclick="approveBizTranslation('${code}')">Aprobar</button>
-             </div>` : "";
+               <div style="display:flex;gap:8px">
+                 ${reTranslateBtn}
+                 <button class="btn btn-secondary btn-sm" onclick="approveBizTranslation('${code}')">Aprobar</button>
+               </div>
+             </div>`
+          : (!isDefault
+            ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px">${reTranslateBtn}</div>`
+            : "");
 
         const pane = document.createElement("div");
         pane.className = "lang-pane" + (isActive ? " active" : "");
@@ -1365,6 +1374,76 @@
       const t = bizDataState.translations[code];
       if (t) t.needs_review = false;
       renderBizDataTabs();
+    }
+
+    async function retranslateBizLanguage(code) {
+      const srcLang = bizDataState.defaultLang || "es";
+      if (code === srcLang) return;
+      if (!confirm(
+        `Se sobrescribirá la traducción actual de ${code.toUpperCase()} con una nueva traducción de IA generada desde ${srcLang.toUpperCase()}.\n\n` +
+        `Esto consume tokens. ¿Continuar?`
+      )) return;
+
+      // Persist current source data first so AI works with the latest text
+      captureBizDataTab();
+      captureWidgetTextTab();
+      const defaultT = bizDataState.translations[srcLang];
+      const srcCT = contactFormState.translations[srcLang] || emptyContactTexts();
+      const srcCTJson = {};
+      CONTACT_TEXT_FIELDS.forEach(f => { if (srcCT[f.key]) srcCTJson[f.key] = srcCT[f.key]; });
+
+      try {
+        if (defaultT) {
+          await fetch(`${API}/business/${businessId}/translations/${srcLang}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: defaultT.name, description: defaultT.description,
+              address: defaultT.address, schedule: defaultT.schedule,
+              extra_info: defaultT.extra_info,
+              welcome: bizLangState.welcomes[srcLang] || "",
+              privacy_url: srcCT.privacy_url || "",
+              contact_texts: JSON.stringify(srcCTJson),
+              needs_review: false,
+            }),
+          });
+        }
+
+        const res = await fetch(`${API}/business/${businessId}/translate`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_language: srcLang,
+            target_languages: [code],
+            overwrite_reviewed: true,
+          }),
+        });
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.detail || "Error"); }
+        const data = await res.json();
+        if (!data || !data.length) throw new Error("La IA no devolvió traducción");
+
+        const t = data[0];
+        bizDataState.translations[t.language_code] = {
+          name: t.name, description: t.description, address: t.address,
+          schedule: t.schedule, extra_info: t.extra_info,
+          auto_translated: t.auto_translated, needs_review: t.needs_review,
+        };
+        if (t.welcome) bizLangState.welcomes[t.language_code] = t.welcome;
+
+        // Also update contact_texts and widget UI texts in local state
+        if (t.contact_texts) {
+          let aiCT = {};
+          try { aiCT = JSON.parse(t.contact_texts); } catch (e) { aiCT = {}; }
+          const ct = contactFormState.translations[t.language_code] || emptyContactTexts();
+          CONTACT_TEXT_FIELDS.forEach(f => { if (aiCT[f.key]) ct[f.key] = aiCT[f.key]; });
+          if (t.privacy_url) ct.privacy_url = t.privacy_url;
+          contactFormState.translations[t.language_code] = ct;
+        }
+
+        renderBizDataTabs();
+        renderWidgetTextFields();
+        renderContactLangTabs();
+      } catch (e) {
+        alert("Error al re-traducir: " + e.message);
+      }
     }
 
     async function translateAll() {
