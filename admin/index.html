@@ -1319,7 +1319,7 @@
 
         // Pane
         const reTranslateBtn = !isDefault
-          ? `<button class="btn btn-sm" style="background:#e5e7eb;color:#1f2937" onclick="retranslateBizLanguage('${code}')">Re-traducir con IA</button>`
+          ? `<button class="btn btn-sm" style="background:#e5e7eb;color:#1f2937" onclick="retranslateBizLanguage('${code}', event)">Re-traducir con IA</button>`
           : "";
         const banner = t.needs_review
           ? `<div class="review-banner">
@@ -1374,15 +1374,29 @@
       const t = bizDataState.translations[code];
       if (t) t.needs_review = false;
       renderBizDataTabs();
+      const msgEl = document.getElementById("bizMsg");
+      if (msgEl) {
+        msgEl.textContent = `Traducción de ${code.toUpperCase()} aprobada en local. Pulsa "Guardar cambios" para persistirla en el servidor.`;
+        msgEl.className = "success-msg";
+        msgEl.style.display = "block";
+      }
     }
 
-    async function retranslateBizLanguage(code) {
+    async function retranslateBizLanguage(code, ev) {
       const srcLang = bizDataState.defaultLang || "es";
       if (code === srcLang) return;
       if (!confirm(
         `Se sobrescribirá la traducción actual de ${code.toUpperCase()} con una nueva traducción de IA generada desde ${srcLang.toUpperCase()}.\n\n` +
         `Esto consume tokens. ¿Continuar?`
       )) return;
+
+      // Show spinner on the button that triggered this
+      const btn = ev && ev.target ? ev.target.closest("button") : null;
+      const originalHtml = btn ? btn.innerHTML : null;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Traduciendo...';
+      }
 
       // Persist current source data first so AI works with the latest text
       captureBizDataTab();
@@ -1441,8 +1455,22 @@
         renderBizDataTabs();
         renderWidgetTextFields();
         renderContactLangTabs();
+
+        const msgEl = document.getElementById("bizMsg");
+        if (msgEl) {
+          msgEl.textContent = `Re-traducción de ${code.toUpperCase()} completada. Revisa los textos y aprueba; después pulsa "Guardar cambios" para persistirla.`;
+          msgEl.className = "success-msg";
+          msgEl.style.display = "block";
+        }
       } catch (e) {
         alert("Error al re-traducir: " + e.message);
+      } finally {
+        // The button was rerendered by renderBizDataTabs, so we don't need to
+        // restore innerHTML — but if the render failed, restore as fallback.
+        if (btn && document.body.contains(btn)) {
+          btn.disabled = false;
+          if (originalHtml) btn.innerHTML = originalHtml;
+        }
       }
     }
 
