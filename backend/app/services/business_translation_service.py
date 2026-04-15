@@ -172,7 +172,16 @@ async def translate_business(
         }
 
         if existing:
-            is_human_approved = not existing.auto_translated and not existing.needs_review
+            # A row counts as human-approved only if it actually has content.
+            # Rows created as side-effect of saving contact_texts can have
+            # auto_translated=False with empty main fields — those should NOT
+            # block AI translation.
+            has_content = bool((existing.name or "").strip() or (existing.description or "").strip())
+            is_human_approved = (
+                not existing.auto_translated
+                and not existing.needs_review
+                and has_content
+            )
             if is_human_approved and not overwrite_reviewed:
                 continue
             for k, v in new_data.items():
