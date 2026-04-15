@@ -1410,6 +1410,12 @@
         captureWidgetTextTab();
 
         const defaultT = bizDataState.translations[srcLang];
+        // Build source contact_texts JSON to ship to the backend so the AI can
+        // translate the admin's custom labels (not just the hardcoded defaults).
+        const srcCT = contactFormState.translations[srcLang] || emptyContactTexts();
+        const srcCTJson = {};
+        CONTACT_TEXT_FIELDS.forEach(f => { if (srcCT[f.key]) srcCTJson[f.key] = srcCT[f.key]; });
+
         if (defaultT) {
           await fetch(`${API}/business/${businessId}/translations/${srcLang}`, {
             method: "PUT", headers: { "Content-Type": "application/json" },
@@ -1418,6 +1424,8 @@
               address: defaultT.address, schedule: defaultT.schedule,
               extra_info: defaultT.extra_info,
               welcome: bizLangState.welcomes[srcLang] || "",
+              privacy_url: srcCT.privacy_url || "",
+              contact_texts: JSON.stringify(srcCTJson),
               needs_review: false,
             }),
           });
@@ -1465,14 +1473,27 @@
           pt: { title: "Chat", subtitle: "Responderemos imediatamente", welcome: "", placeholder: "Escreva sua mensagem..." },
         };
 
+        // Index AI-translated rows by language for quick lookup
+        const aiByLang = {};
+        data.forEach(t => { aiByLang[t.language_code] = t; });
+
         toTranslate.forEach(code => {
-          // Contact texts
+          // Contact texts — priority order: AI translation > existing user edit > hardcoded default > source
           const ct = contactFormState.translations[code] || emptyContactTexts();
           const ctDefaults = I18N_CONTACT[code] || {};
+          let aiCT = {};
+          const aiRow = aiByLang[code];
+          if (aiRow && aiRow.contact_texts) {
+            try { aiCT = JSON.parse(aiRow.contact_texts); } catch (e) { aiCT = {}; }
+          }
           CONTACT_TEXT_FIELDS.forEach(f => {
-            if (!ct[f.key]) ct[f.key] = ctDefaults[f.key] || srcContact[f.key] || "";
+            // Overwrite with AI translation if we got one, else keep existing or fallback
+            if (aiCT[f.key]) ct[f.key] = aiCT[f.key];
+            else if (!ct[f.key]) ct[f.key] = ctDefaults[f.key] || srcContact[f.key] || "";
           });
-          if (!ct.privacy_url) ct.privacy_url = srcContact.privacy_url || "";
+          // privacy_url: inherit from AI row or source
+          if (aiRow && aiRow.privacy_url) ct.privacy_url = aiRow.privacy_url;
+          else if (!ct.privacy_url) ct.privacy_url = srcContact.privacy_url || "";
           contactFormState.translations[code] = ct;
 
           // Embed texts

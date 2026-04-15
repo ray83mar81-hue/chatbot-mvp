@@ -31,6 +31,7 @@ Source content:
 - schedule (opening hours, JSON string with day names as keys): {json.dumps(source["schedule"], ensure_ascii=False)}
 - extra_info (additional info for customers): {json.dumps(source["extra_info"], ensure_ascii=False)}
 - welcome (greeting message shown when chat opens): {json.dumps(source["welcome"], ensure_ascii=False)}
+- contact_texts (contact form labels, JSON object with short UI strings): {json.dumps(source["contact_texts"], ensure_ascii=False)}
 
 Rules:
 - Translate naturally and idiomatically.
@@ -38,6 +39,7 @@ Rules:
 - Preserve phone numbers, emails, URLs unchanged.
 - The business name should generally stay the same unless it has an established localized variant.
 - For schedule: translate the day names (e.g. "lunes" → "Monday") but keep the hours unchanged. Keep it as a valid JSON string.
+- For contact_texts: translate EACH value inside the object. Keep the keys unchanged. Return it as a valid JSON string (quoted). These are short UI labels: keep them concise and idiomatic.
 - Output ONLY a JSON object, no markdown fences.
 
 Output schema:
@@ -48,7 +50,8 @@ Output schema:
     "address": "...",
     "schedule": "...",
     "extra_info": "...",
-    "welcome": "..."
+    "welcome": "...",
+    "contact_texts": "..."
   }}
 }}
 """
@@ -95,7 +98,9 @@ async def translate_business(
     if src_row:
         source = {"name": src_row.name, "description": src_row.description,
                   "address": src_row.address, "schedule": src_row.schedule or "{}",
-                  "extra_info": src_row.extra_info, "welcome": src_row.welcome or ""}
+                  "extra_info": src_row.extra_info, "welcome": src_row.welcome or "",
+                  "contact_texts": src_row.contact_texts or "{}"}
+        src_privacy_url = src_row.privacy_url or ""
     else:
         # Fallback: get welcome from welcome_messages JSON on the business
         import json as _json
@@ -106,7 +111,9 @@ async def translate_business(
         source = {"name": business.name, "description": business.description,
                   "address": business.address, "schedule": business.schedule or "{}",
                   "extra_info": business.extra_info,
-                  "welcome": welcomes.get(source_language_code, "")}
+                  "welcome": welcomes.get(source_language_code, ""),
+                  "contact_texts": "{}"}
+        src_privacy_url = ""
 
     prompt = _build_prompt(
         source_language_name=by_code[source_language_code].name,
@@ -141,6 +148,19 @@ async def translate_business(
             .first()
         )
 
+        # contact_texts comes back as a JSON string — validate it is parseable,
+        # otherwise fall back to the source texts so the admin at least has
+        # something to edit. Never store invalid JSON.
+        raw_ct = entry.get("contact_texts")
+        if isinstance(raw_ct, dict):
+            ct_str = json.dumps(raw_ct, ensure_ascii=False)
+        else:
+            ct_str = str(raw_ct or source["contact_texts"] or "{}").strip()
+            try:
+                json.loads(ct_str)
+            except Exception:
+                ct_str = source["contact_texts"] or "{}"
+
         new_data = {
             "name": str(entry.get("name") or "").strip(),
             "description": str(entry.get("description") or "").strip(),
@@ -148,6 +168,7 @@ async def translate_business(
             "schedule": str(entry.get("schedule") or "{}").strip(),
             "extra_info": str(entry.get("extra_info") or "").strip(),
             "welcome": str(entry.get("welcome") or "").strip(),
+            "contact_texts": ct_str,
         }
 
         if existing:
@@ -156,6 +177,9 @@ async def translate_business(
                 continue
             for k, v in new_data.items():
                 setattr(existing, k, v)
+            # privacy_url is a URL — inherit source if target has none
+            if not existing.privacy_url and src_privacy_url:
+                existing.privacy_url = src_privacy_url
             existing.auto_translated = True
             existing.needs_review = True
             saved.append(existing)
@@ -163,12 +187,26 @@ async def translate_business(
             row = BusinessTranslation(
                 business_id=business.id,
                 language_code=code,
+                privacy_url=src_privacy_url,
                 auto_translated=True,
                 needs_review=True,
                 **new_data,
             )
             db.add(row)
             saved.append(row)
+
+    # Sync welcome messages from BusinessTranslation into Business.welcome_messages
+    # so the widget (which reads welcome_messages) stays in sync.
+    try:
+        welcomes = json.loads(business.welcome_messages or "{}")
+        if not isinstance(welcomes, dict):
+            welcomes = {}
+    except Exception:
+        welcomes = {}
+    for t in saved:
+        if t.welcome:
+            welcomes[t.language_code] = t.welcome
+    business.welcome_messages = json.dumps(welcomes, ensure_ascii=False)
 
     db.commit()
     for t in saved:
