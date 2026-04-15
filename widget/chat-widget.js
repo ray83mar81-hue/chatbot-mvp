@@ -204,6 +204,7 @@
   /* ── Styles ────────────────────────────────────────────────── */
   const css = `
     .cw-root, .cw-root * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .cw-root [hidden] { display: none !important; }
 
     /* Bubble */
     .cw-bubble {
