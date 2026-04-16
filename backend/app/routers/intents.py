@@ -198,6 +198,40 @@ def list_conflicts(
     return conflicts
 
 
+# ── Bulk delete ──────────────────────────────────────────────────────
+# Declared BEFORE the /{intent_id} routes so FastAPI doesn't try to parse
+# "bulk" as an integer intent_id and return 422.
+
+
+class BulkDeleteResult(BaseModel):
+    deleted: int
+
+
+@router.delete("/bulk", response_model=BulkDeleteResult)
+def bulk_delete_intents(
+    business_id: int,
+    confirm: str,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete EVERY intent of a business in one go. Destructive — requires
+    ?confirm=DELETE to avoid accidental fires. Cascade deletes intent
+    translations (via SQLAlchemy cascade on the model).
+    """
+    assert_business_write(current, business_id)
+    if confirm != "DELETE":
+        raise HTTPException(
+            status_code=400,
+            detail="Confirmation required. Pass ?confirm=DELETE to proceed.",
+        )
+    intents = db.query(Intent).filter(Intent.business_id == business_id).all()
+    count = len(intents)
+    for intent in intents:
+        db.delete(intent)
+    db.commit()
+    return BulkDeleteResult(deleted=count)
+
+
 @router.get("/{intent_id}", response_model=IntentResponse)
 def get_intent(
     intent_id: int,

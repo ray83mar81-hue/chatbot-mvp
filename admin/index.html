@@ -408,6 +408,7 @@
             <button class="btn" style="background:#fef3c7;color:#92400e" onclick="openTemplatesModal()">✨ Plantillas por sector</button>
             <button class="btn" id="translateAllIntentsBtn" style="background:#dbeafe;color:#1e40af" onclick="translateAllIntents()">Traducir todos con IA</button>
             <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="openImportModal()">Importar CSV</button>
+            <button class="btn" style="background:#fee2e2;color:#991b1b" onclick="openBulkDeleteModal()" title="Borrar TODOS los intents">🗑️ Borrar todos</button>
             <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
           </div>
         </div>
@@ -856,6 +857,25 @@
         <button class="btn btn-danger btn-sm" onclick="deleteContact()" style="margin-right:auto">Borrar (RGPD)</button>
         <button class="btn btn-secondary" onclick="closeContactModal()">Cerrar</button>
         <button class="btn btn-primary" onclick="saveContactStatus()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Bulk delete intents ═══════ -->
+  <div class="modal-overlay" id="bulkDeleteModal">
+    <div class="modal" style="width:480px">
+      <h3 style="color:#991b1b">🗑️ Borrar TODOS los intents</h3>
+      <p style="color:#4b5563;font-size:14px;margin:12px 0">
+        Se eliminarán <strong id="bulkDeleteCount">todos</strong> los intents de este negocio, incluidas todas sus traducciones.
+      </p>
+      <p style="color:#991b1b;font-size:13px;margin-bottom:16px">
+        <strong>Esta acción no se puede deshacer.</strong> Escribe <code style="background:#fee2e2;padding:2px 6px;border-radius:3px">BORRAR</code> para confirmar.
+      </p>
+      <input id="bulkDeleteConfirmInput" placeholder="Escribe BORRAR aquí" oninput="document.getElementById('bulkDeleteBtn').disabled = this.value.trim() !== 'BORRAR'" style="width:100%;padding:10px 14px;border:2px solid #fca5a5;border-radius:8px;font-family:monospace;font-size:14px" />
+      <div id="bulkDeleteMsg" style="display:none;margin-top:12px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeBulkDeleteModal()">Cancelar</button>
+        <button class="btn btn-danger" id="bulkDeleteBtn" disabled onclick="confirmBulkDelete()">Borrar todos</button>
       </div>
     </div>
   </div>
@@ -1872,6 +1892,60 @@
       renderIntentTabs();
     }
 
+    /* ── Bulk delete intents ──────────────────────────────────── */
+    async function openBulkDeleteModal() {
+      // Try to show a count so the admin knows how many they're deleting
+      try {
+        const res = await fetch(`${API}/intents/?business_id=${businessId}`);
+        if (res.ok) {
+          const list = await res.json();
+          document.getElementById("bulkDeleteCount").textContent = `los ${list.length}`;
+        }
+      } catch (e) { /* non-critical */ }
+
+      document.getElementById("bulkDeleteConfirmInput").value = "";
+      document.getElementById("bulkDeleteBtn").disabled = true;
+      document.getElementById("bulkDeleteMsg").style.display = "none";
+      document.getElementById("bulkDeleteModal").classList.add("open");
+    }
+
+    function closeBulkDeleteModal() {
+      document.getElementById("bulkDeleteModal").classList.remove("open");
+    }
+
+    async function confirmBulkDelete() {
+      const msgEl = document.getElementById("bulkDeleteMsg");
+      const btn = document.getElementById("bulkDeleteBtn");
+      msgEl.style.display = "none";
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Borrando...';
+
+      try {
+        const res = await fetch(`${API}/intents/bulk?business_id=${businessId}&confirm=DELETE`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        const result = await res.json();
+        msgEl.className = "success-msg";
+        msgEl.textContent = `✅ ${result.deleted} intent(s) eliminado(s)`;
+        msgEl.style.display = "block";
+        await loadIntents();
+        setTimeout(closeBulkDeleteModal, 1500);
+      } catch (e) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = "Error: " + e.message;
+        msgEl.style.display = "block";
+      } finally {
+        btn.innerHTML = original;
+        // Don't re-enable unless the user re-types BORRAR
+        btn.disabled = document.getElementById("bulkDeleteConfirmInput").value.trim() !== "BORRAR";
+      }
+    }
+
     /* ── Sector templates ─────────────────────────────────────── */
     let _currentTemplateId = null;
 
@@ -2185,13 +2259,42 @@
           `;
         }).join("");
 
+        // Top offending keywords — which specific words cause most of the mess
+        const kwCount = {};
+        conflicts.forEach(c => {
+          const a = (c.keyword_a || "").toLowerCase().trim();
+          const b = (c.keyword_b || "").toLowerCase().trim();
+          if (a) kwCount[a] = (kwCount[a] || 0) + 1;
+          if (b !== a && b) kwCount[b] = (kwCount[b] || 0) + 1;
+        });
+        const topKws = Object.entries(kwCount)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8);
+
+        const topKwsHtml = topKws.length
+          ? `<div style="background:#fff;padding:10px 14px;border-radius:6px;margin:8px 0 14px;font-size:12px">
+              <strong style="color:#78350f">Top keywords implicadas:</strong>
+              ${topKws.map(([kw, n]) => `<code style="background:#fef3c7;padding:2px 6px;border-radius:3px;margin:0 2px;font-size:11px">${esc(kw)} × ${n}</code>`).join(" ")}
+              <div style="margin-top:6px;color:#78350f;font-style:italic">Empieza quitando las palabras genéricas (preposiciones, conectores, verbos generales) de todos los intents donde aparezcan.</div>
+            </div>`
+          : "";
+
+        const tooMany = conflicts.length > 50;
+        const nuclearTip = tooMany
+          ? `<div style="background:#fee2e2;padding:10px 14px;border-radius:6px;margin:0 0 10px;font-size:13px;color:#991b1b">
+              <strong>Demasiados conflictos (${conflicts.length}).</strong> Si el CSV de importación te lió, lo más rápido es <strong>borrar todos los intents y empezar de cero</strong> con una plantilla sectorial. Usa el botón rojo "🗑️ Borrar todos" arriba.
+            </div>`
+          : "";
+
         block.innerHTML = `
-          <details style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px">
+          <details style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px"${tooMany ? "" : ""}>
             <summary style="cursor:pointer;font-weight:700;color:#78350f">⚠️ ${conflicts.length} conflicto${conflicts.length === 1 ? "" : "s"} de keywords entre intents — clic para revisar</summary>
-            <p style="font-size:13px;color:#78350f;margin:8px 0 12px">
+            ${nuclearTip}
+            <p style="font-size:13px;color:#78350f;margin:8px 0 0">
               Cuando dos intents comparten keywords, el bot puede responder con el intent equivocado.
               Resuélvelo editando keywords o ajustando la prioridad.
             </p>
+            ${topKwsHtml}
             ${sections}
           </details>
         `;
