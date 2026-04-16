@@ -15,6 +15,9 @@
     height: script?.getAttribute("data-height") || "540",
     bubbleEmoji: script?.getAttribute("data-bubble-emoji") || "",
     bubbleImage: script?.getAttribute("data-bubble-image") || "",
+    // Force a specific language on startup (overrides navigator.language).
+    // Used by the hosted landing page so the widget matches the page language.
+    forceLang: (script?.getAttribute("data-force-lang") || "").toLowerCase(),
     headerAvatarType: "default",
     headerAvatarEmoji: "",
     headerAvatarImage: "",
@@ -710,6 +713,9 @@
   /* ── Init: fetch business languages and pick one ───────────── */
   function pickInitialLanguage(supported, defaultLang) {
     const supportedCodes = supported.map((l) => l.code);
+    // data-force-lang wins: used by the landing page to sync chat with the
+    // language the visitor is reading the page in.
+    if (CONFIG.forceLang && supportedCodes.includes(CONFIG.forceLang)) return CONFIG.forceLang;
     const browserLang = (navigator.language || "").slice(0, 2).toLowerCase();
     if (browserLang && supportedCodes.includes(browserLang)) return browserLang;
     if (supportedCodes.includes(defaultLang)) return defaultLang;

@@ -661,6 +661,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
     src="/widget/chat-widget.js"
     data-business-id="{business.id}"
     data-api-url=""
+    data-force-lang="{_esc(lang)}"
   ></script>
 </body>
 </html>"""
