@@ -35,6 +35,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     return LoginResponse(
         access_token=token,
         role=user.role,
+        tenant_role=user.tenant_role or "owner",
         business_id=user.business_id,
     )
 
@@ -75,6 +76,7 @@ def register(data: AdminUserCreate, db: Session = Depends(get_db)):
     return LoginResponse(
         access_token=token,
         role=user.role,
+        tenant_role=user.tenant_role or "owner",
         business_id=user.business_id,
     )
 
@@ -124,6 +126,7 @@ def admin_register(
     return LoginResponse(
         access_token=token,
         role=user.role,
+        tenant_role=user.tenant_role or "owner",
         business_id=user.business_id,
     )
 
@@ -134,5 +137,6 @@ def get_me(current: AdminUser = Depends(get_current_user)):
         id=current.id,
         email=current.email,
         role=current.role,
+        tenant_role=current.tenant_role or "owner",
         business_id=current.business_id,
     )

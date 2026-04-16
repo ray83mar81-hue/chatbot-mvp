@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import assert_business_access, get_current_user, require_superadmin
+from app.deps import assert_business_access, assert_business_write, get_current_user, require_superadmin
 from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation
@@ -55,7 +55,7 @@ def update_business(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    assert_business_access(current, business_id)
+    assert_business_write(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -104,7 +104,7 @@ def upsert_business_translation(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    assert_business_access(current, business_id)
+    assert_business_write(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -160,7 +160,7 @@ async def translate_business_endpoint(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    assert_business_access(current, business_id)
+    assert_business_write(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")

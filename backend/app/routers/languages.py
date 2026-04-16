@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import assert_business_access, get_current_user
+from app.deps import assert_business_write, get_current_user
 from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.language import Language
@@ -100,7 +100,7 @@ def update_business_languages(
     db: Session = Depends(get_db),
 ):
     """Admin: update which languages this business supports."""
-    assert_business_access(current, business_id)
+    assert_business_write(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")

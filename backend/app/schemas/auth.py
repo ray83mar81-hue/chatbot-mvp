@@ -10,6 +10,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     role: str
+    tenant_role: str = "owner"
     business_id: int | None = None
 
 
@@ -24,4 +25,5 @@ class MeResponse(BaseModel):
     id: int
     email: str
     role: str
+    tenant_role: str = "owner"
     business_id: int | None = None

@@ -17,7 +17,7 @@ from app.models import (
     IntentTranslation,
     Language,
 )
-from app.routers import auth, business, chat, contact, conversations, intents, languages, metrics, superadmin
+from app.routers import auth, business, chat, contact, conversations, intents, languages, metrics, superadmin, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -41,6 +41,7 @@ app.include_router(auth.router)
 app.include_router(languages.router)
 app.include_router(contact.router)
 app.include_router(superadmin.router)
+app.include_router(tenant_admins.router)
 
 
 @app.on_event("startup")
@@ -89,6 +90,8 @@ SCHEMA_MIGRATIONS = [
     ("messages", "tokens_out", "INTEGER"),
     # Monthly token quota per tenant (NULL = unlimited)
     ("businesses", "monthly_token_quota", "INTEGER"),
+    # Within-tenant role: "owner" | "viewer" (read-only safety)
+    ("admin_users", "tenant_role", "VARCHAR(20) DEFAULT 'owner' NOT NULL"),
 ]
 
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import assert_business_access, get_current_user
+from app.deps import assert_business_access, assert_business_write, get_current_user
 from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.intent import Intent
@@ -29,6 +29,16 @@ def _get_intent_and_check_access(
     if not intent:
         raise HTTPException(status_code=404, detail="Intent not found")
     assert_business_access(current, intent.business_id)
+    return intent
+
+
+def _get_intent_and_check_write(
+    intent_id: int, current: AdminUser, db: Session
+) -> Intent:
+    intent = db.query(Intent).filter(Intent.id == intent_id).first()
+    if not intent:
+        raise HTTPException(status_code=404, detail="Intent not found")
+    assert_business_write(current, intent.business_id)
     return intent
 
 
@@ -62,7 +72,7 @@ def create_intent(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    assert_business_access(current, data.business_id)
+    assert_business_write(current, data.business_id)
     intent = Intent(**data.model_dump())
     db.add(intent)
     db.commit()
@@ -95,7 +105,7 @@ def update_intent(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    intent = _get_intent_and_check_access(intent_id, current, db)
+    intent = _get_intent_and_check_write(intent_id, current, db)
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -112,7 +122,7 @@ def delete_intent(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    intent = _get_intent_and_check_access(intent_id, current, db)
+    intent = _get_intent_and_check_write(intent_id, current, db)
     db.delete(intent)
     db.commit()
     return {"detail": "Intent deleted"}
@@ -156,7 +166,7 @@ def upsert_intent_translation(
     Setting needs_review=False marks it as human-reviewed (won't be overwritten
     by future auto-translations unless overwrite_reviewed=True).
     """
-    intent = _get_intent_and_check_access(intent_id, current, db)
+    intent = _get_intent_and_check_write(intent_id, current, db)
 
     # Verify the language exists and is active
     lang = (
@@ -231,7 +241,7 @@ async def translate_intent_endpoint(
     Each call costs tokens — use sparingly. Generated translations are
     stored with needs_review=True so the admin can review them in the UI.
     """
-    intent = _get_intent_and_check_access(intent_id, current, db)
+    intent = _get_intent_and_check_write(intent_id, current, db)
 
     business = db.query(Business).filter(Business.id == intent.business_id).first()
     if not business:

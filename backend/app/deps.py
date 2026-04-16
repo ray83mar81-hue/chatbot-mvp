@@ -56,7 +56,7 @@ def require_superadmin(user: AdminUser = Depends(get_current_user)) -> AdminUser
 def assert_business_access(
     user: AdminUser, business_id: int, x_impersonate_business_id: int | None = None
 ) -> int:
-    """Check that the user can operate on business_id.
+    """Check that the user can operate on business_id (read access).
 
     Returns the effective business_id (useful for endpoints that want to
     respect impersonation — usually a no-op since we already enforce the ID
@@ -71,6 +71,34 @@ def assert_business_access(
     if user.business_id is None or user.business_id != business_id:
         raise HTTPException(status_code=403, detail="Forbidden")
     return business_id
+
+
+def assert_business_write(user: AdminUser, business_id: int) -> int:
+    """Check read access AND that the user is allowed to mutate this tenant's
+    data. Viewers are blocked; owners pass through. Superadmin always passes.
+    """
+    assert_business_access(user, business_id)
+    if user.role == "superadmin":
+        return business_id
+    if (user.tenant_role or "owner") != "owner":
+        raise HTTPException(
+            status_code=403,
+            detail="Read-only role: you cannot modify this business. Ask an owner.",
+        )
+    return business_id
+
+
+def require_tenant_owner(user: AdminUser = Depends(get_current_user)) -> AdminUser:
+    """For endpoints that manage tenant-level users (invites, removals).
+    Superadmin is accepted too (they can manage users on any tenant).
+    """
+    if user.role == "superadmin":
+        return user
+    if user.role != "client_admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if (user.tenant_role or "owner") != "owner":
+        raise HTTPException(status_code=403, detail="Only the business owner can manage users")
+    return user
 
 
 def resolve_business_id(

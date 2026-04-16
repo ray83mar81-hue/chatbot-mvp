@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.deps import assert_business_access, get_current_user
+from app.deps import assert_business_access, assert_business_write, get_current_user
 from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation
@@ -268,7 +268,7 @@ def update_contact_request(
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact request not found")
-    assert_business_access(current, contact.business_id)
+    assert_business_write(current, contact.business_id)
 
     if data.status is not None:
         valid = {"new", "contacted", "closed"}
@@ -298,7 +298,7 @@ def delete_contact_request(
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact request not found")
-    assert_business_access(current, contact.business_id)
+    assert_business_write(current, contact.business_id)
     db.delete(contact)
     db.commit()
     return {"detail": "Contact request deleted"}
