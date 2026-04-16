@@ -83,6 +83,121 @@ def list_intents(
     )
 
 
+# ── Conflicts detection ─────────────────────────────────────────────
+# Two intents "compete" when they share a keyword (duplicate) or when
+# one's keyword is a substring of another's. The matcher decides by
+# priority + substring length but the admin should SEE the conflict
+# so they can fix it by design (change a keyword, adjust priority).
+
+
+class KeywordConflict(BaseModel):
+    type: str  # "duplicate" | "substring"
+    keyword_a: str
+    keyword_b: str
+    intent_a_id: int
+    intent_a_name: str
+    intent_a_priority: int
+    intent_b_id: int
+    intent_b_name: str
+    intent_b_priority: int
+    language_code: str
+    explanation: str
+
+
+def _normalize_kw(s: str) -> str:
+    import unicodedata as _u
+    s = (s or "").lower().strip()
+    nfkd = _u.normalize("NFKD", s)
+    s = "".join(c for c in nfkd if not _u.combining(c))
+    for ch in "¿?¡!.,;:\"'()[]{}":
+        s = s.replace(ch, "")
+    return s.strip()
+
+
+@router.get("/conflicts", response_model=list[KeywordConflict])
+def list_conflicts(
+    business_id: int = 1,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Detect keyword overlaps between intents of the same business.
+
+    Checked across every supported language (uses IntentTranslation).
+    Returns one entry per colliding keyword pair.
+    """
+    assert_business_access(current, business_id)
+
+    # (intent_id, name, priority, language_code, keywords_list)
+    rows = (
+        db.query(Intent, IntentTranslation)
+        .join(IntentTranslation, IntentTranslation.intent_id == Intent.id)
+        .filter(Intent.business_id == business_id, Intent.is_active.is_(True))
+        .all()
+    )
+
+    # Bucket by language so we only compare intents in the same language
+    by_lang: dict[str, list[tuple[int, str, int, list[str]]]] = {}
+    for intent, trans in rows:
+        try:
+            kws = json.loads(trans.keywords or "[]")
+            if not isinstance(kws, list):
+                continue
+        except json.JSONDecodeError:
+            continue
+        by_lang.setdefault(trans.language_code, []).append(
+            (intent.id, intent.name, intent.priority or 0, kws)
+        )
+
+    conflicts: list[KeywordConflict] = []
+
+    for lang, intents in by_lang.items():
+        # Compare every pair of intents in this language
+        for i in range(len(intents)):
+            id_a, name_a, prio_a, kws_a = intents[i]
+            for j in range(i + 1, len(intents)):
+                id_b, name_b, prio_b, kws_b = intents[j]
+                for kw_a in kws_a:
+                    na = _normalize_kw(kw_a)
+                    if not na:
+                        continue
+                    for kw_b in kws_b:
+                        nb = _normalize_kw(kw_b)
+                        if not nb:
+                            continue
+                        if na == nb:
+                            conflicts.append(KeywordConflict(
+                                type="duplicate",
+                                keyword_a=kw_a, keyword_b=kw_b,
+                                intent_a_id=id_a, intent_a_name=name_a, intent_a_priority=prio_a,
+                                intent_b_id=id_b, intent_b_name=name_b, intent_b_priority=prio_b,
+                                language_code=lang,
+                                explanation=(
+                                    f"Ambos intents usan la keyword '{kw_a}'. "
+                                    f"Gana el de mayor prioridad."
+                                    if prio_a != prio_b
+                                    else f"Ambos intents tienen la misma keyword y la misma prioridad "
+                                         f"({prio_a}). El matcher escogerá uno u otro sin criterio estable."
+                                ),
+                            ))
+                        elif na in nb or nb in na:
+                            # Substring overlap — e.g. "paella" vs "encargar paella"
+                            short, long_ = (na, nb) if len(na) < len(nb) else (nb, na)
+                            conflicts.append(KeywordConflict(
+                                type="substring",
+                                keyword_a=kw_a, keyword_b=kw_b,
+                                intent_a_id=id_a, intent_a_name=name_a, intent_a_priority=prio_a,
+                                intent_b_id=id_b, intent_b_name=name_b, intent_b_priority=prio_b,
+                                language_code=lang,
+                                explanation=(
+                                    f"'{short}' está contenido en '{long_}'. Si un usuario escribe el "
+                                    f"texto largo con palabras intermedias, gana el intent de la keyword "
+                                    f"corta. Considera usar una prioridad más alta en el intent con la "
+                                    f"keyword más específica, o afinar las keywords."
+                                ),
+                            ))
+    return conflicts
+
+
 @router.get("/{intent_id}", response_model=IntentResponse)
 def get_intent(
     intent_id: int,

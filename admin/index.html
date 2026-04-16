@@ -432,6 +432,7 @@
         </details>
 
         <div id="translateAllMsg" style="display:none;margin-bottom:12px"></div>
+        <div id="intentConflictsBlock" style="display:none;margin-bottom:16px"></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Nombre</th><th>Keywords</th><th>Respuesta</th><th>Prioridad</th><th>Acciones</th></tr></thead>
@@ -1728,6 +1729,9 @@
         const intents = await res.json();
         const tbody = document.getElementById("intentsBody");
 
+        // Fire conflict detection in parallel (don't block the table)
+        loadIntentConflicts();
+
         if (intents.length === 0) {
           tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">No hay intents</td></tr>`;
           return;
@@ -2129,6 +2133,75 @@
         btn.disabled = false;
         btn.textContent = "Importar";
       }
+    }
+
+    /* ── Intent keyword conflicts ────────────────────────────── */
+    async function loadIntentConflicts() {
+      const block = document.getElementById("intentConflictsBlock");
+      if (!block) return;
+      try {
+        const res = await fetch(`${API}/intents/conflicts?business_id=${businessId}`);
+        if (!res.ok) { block.style.display = "none"; return; }
+        const conflicts = await res.json();
+        if (!conflicts.length) { block.style.display = "none"; return; }
+
+        // Group conflicts by language so the admin sees each language's mess separately
+        const byLang = {};
+        conflicts.forEach(c => {
+          (byLang[c.language_code] = byLang[c.language_code] || []).push(c);
+        });
+
+        const sections = Object.entries(byLang).map(([lang, list]) => {
+          const items = list.map(c => {
+            const kwA = `<code style="background:#fff;padding:2px 6px;border-radius:3px;color:#92400e;font-size:12px">${esc(c.keyword_a)}</code>`;
+            const kwB = `<code style="background:#fff;padding:2px 6px;border-radius:3px;color:#92400e;font-size:12px">${esc(c.keyword_b)}</code>`;
+            const typeLabel = c.type === "duplicate" ? "🔁 Duplicada" : "🔗 Solapamiento";
+            return `
+              <div style="border-top:1px solid #fde68a;padding:10px 0;font-size:13px;color:#78350f">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <strong>${typeLabel}:</strong>
+                  <button class="btn btn-sm" style="background:#fff;color:#78350f;border:1px solid #fde68a" onclick="editIntentById(${c.intent_a_id})">Editar "${esc(c.intent_a_name)}"</button>
+                </div>
+                <div style="margin:4px 0">
+                  Intent <strong>${esc(c.intent_a_name)}</strong> <span style="color:#9a3412">(prioridad ${c.intent_a_priority})</span> con ${kwA}
+                  <br>↕ en conflicto con<br>
+                  Intent <strong>${esc(c.intent_b_name)}</strong> <span style="color:#9a3412">(prioridad ${c.intent_b_priority})</span> con ${kwB}
+                </div>
+                <div style="color:#9a3412;font-style:italic;font-size:12px">${esc(c.explanation)}</div>
+              </div>
+            `;
+          }).join("");
+          return `
+            <div style="padding:6px 0">
+              <div style="font-weight:600;font-size:12px;text-transform:uppercase;color:#78350f">Idioma: ${lang.toUpperCase()} — ${list.length} conflicto${list.length === 1 ? "" : "s"}</div>
+              ${items}
+            </div>
+          `;
+        }).join("");
+
+        block.innerHTML = `
+          <details style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px">
+            <summary style="cursor:pointer;font-weight:700;color:#78350f">⚠️ ${conflicts.length} conflicto${conflicts.length === 1 ? "" : "s"} de keywords entre intents — clic para revisar</summary>
+            <p style="font-size:13px;color:#78350f;margin:8px 0 12px">
+              Cuando dos intents comparten keywords, el bot puede responder con el intent equivocado.
+              Resuélvelo editando keywords o ajustando la prioridad.
+            </p>
+            ${sections}
+          </details>
+        `;
+        block.style.display = "block";
+      } catch (e) {
+        block.style.display = "none";
+      }
+    }
+
+    async function editIntentById(id) {
+      try {
+        const res = await fetch(`${API}/intents/${id}`);
+        if (!res.ok) return;
+        const intent = await res.json();
+        openIntentModal(intent);
+      } catch (e) { console.error(e); }
     }
 
     async function openIntentModal(data) {
