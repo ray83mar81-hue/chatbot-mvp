@@ -17,7 +17,7 @@ from app.models import (
     IntentTranslation,
     Language,
 )
-from app.routers import auth, business, chat, contact, conversations, intents, landing, languages, metrics, superadmin, tenant_admins
+from app.routers import auth, business, chat, contact, conversations, intents, landing, languages, metrics, superadmin, templates, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -43,6 +43,7 @@ app.include_router(contact.router)
 app.include_router(superadmin.router)
 app.include_router(tenant_admins.router)
 app.include_router(landing.router)
+app.include_router(templates.router)
 
 
 @app.on_event("startup")

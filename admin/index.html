@@ -404,7 +404,8 @@
       <div class="section" id="sec-intents">
         <div class="page-header">
           <h2>Intents</h2>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" style="background:#fef3c7;color:#92400e" onclick="openTemplatesModal()">✨ Plantillas por sector</button>
             <button class="btn" id="translateAllIntentsBtn" style="background:#dbeafe;color:#1e40af" onclick="translateAllIntents()">Traducir todos con IA</button>
             <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="openImportModal()">Importar CSV</button>
             <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
@@ -848,6 +849,34 @@
         <button class="btn btn-danger btn-sm" onclick="deleteContact()" style="margin-right:auto">Borrar (RGPD)</button>
         <button class="btn btn-secondary" onclick="closeContactModal()">Cerrar</button>
         <button class="btn btn-primary" onclick="saveContactStatus()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Sector templates gallery ═══════ -->
+  <div class="modal-overlay" id="templatesModal">
+    <div class="modal" style="width:720px;max-width:95vw">
+      <h3>Plantillas por sector</h3>
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 20px">
+        Carga intents y textos pre-configurados según tu tipo de negocio. Los intents que ya tengas <strong>no se sobrescriben</strong>.
+      </p>
+      <div id="templatesGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px"></div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn btn-secondary" onclick="closeTemplatesModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Template preview ═══════ -->
+  <div class="modal-overlay" id="templatePreviewModal">
+    <div class="modal" style="width:640px;max-width:95vw">
+      <h3 id="previewTitle">Vista previa</h3>
+      <p style="color:#6b7280;font-size:13px;margin:6px 0 16px" id="previewDescription"></p>
+      <div id="previewContent" style="max-height:50vh;overflow:auto"></div>
+      <div id="previewMsg" style="display:none;margin-top:12px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeTemplatePreview()">Volver</button>
+        <button class="btn btn-primary" id="applyTemplateBtn" onclick="applyCurrentTemplate()">Aplicar plantilla</button>
       </div>
     </div>
   </div>
@@ -1830,6 +1859,139 @@
       captureCurrentTab();
       intentState.currentTab = code;
       renderIntentTabs();
+    }
+
+    /* ── Sector templates ─────────────────────────────────────── */
+    let _currentTemplateId = null;
+
+    async function openTemplatesModal() {
+      try {
+        const res = await fetch(`${API}/templates`);
+        if (!res.ok) throw new Error("Error al cargar plantillas");
+        const templates = await res.json();
+        const gallery = document.getElementById("templatesGallery");
+        gallery.innerHTML = templates.map(t => `
+          <div onclick="previewTemplate('${t.id}')"
+               style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s,transform .15s;text-align:center"
+               onmouseover="this.style.borderColor='#2563eb';this.style.transform='translateY(-2px)'"
+               onmouseout="this.style.borderColor='#e5e7eb';this.style.transform='translateY(0)'">
+            <div style="font-size:36px;margin-bottom:8px">${t.icon}</div>
+            <div style="font-weight:700;color:#111827;margin-bottom:4px">${esc(t.name)}</div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">${esc(t.description)}</div>
+            <div style="font-size:11px;color:#2563eb;font-weight:600">${t.intent_count} intents incluidos</div>
+          </div>
+        `).join("");
+        document.getElementById("templatesModal").classList.add("open");
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function closeTemplatesModal() {
+      document.getElementById("templatesModal").classList.remove("open");
+    }
+
+    async function previewTemplate(id) {
+      _currentTemplateId = id;
+      try {
+        const res = await fetch(`${API}/templates/${id}`);
+        if (!res.ok) throw new Error("Error al cargar plantilla");
+        const t = await res.json();
+
+        document.getElementById("previewTitle").textContent = `${t.icon} ${t.name}`;
+        document.getElementById("previewDescription").textContent = t.description;
+        document.getElementById("previewMsg").style.display = "none";
+
+        const intentsHtml = t.intents.map(i => `
+          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <strong style="color:#111827">${esc(i.name)}</strong>
+              <span style="font-size:11px;color:#6b7280">Prioridad ${i.priority}</span>
+            </div>
+            <div style="font-size:12px;color:#4b5563;margin:4px 0">
+              <strong>Keywords:</strong> ${i.keywords.map(k => `<code style="background:#e5e7eb;padding:1px 6px;border-radius:3px;font-size:11px">${esc(k)}</code>`).join(" ")}
+            </div>
+            <div style="font-size:13px;color:#374151;margin-top:6px">${esc(i.response)}</div>
+          </div>
+        `).join("");
+
+        document.getElementById("previewContent").innerHTML = `
+          <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;color:#1e3a8a">
+            Al aplicar la plantilla:
+            <ul style="margin:6px 0 0 20px;padding:0">
+              <li><strong>${t.intents.length} intents</strong> se crearán (los que ya tengas con el mismo nombre se saltan)</li>
+              <li>Si tu <strong>descripción / info extra / bienvenida</strong> están vacías, se rellenan con el ejemplo de esta plantilla</li>
+              <li>Todo queda en el idioma por defecto. Después puedes traducir con "Traducir todos con IA"</li>
+            </ul>
+          </div>
+          <h4 style="margin:12px 0 8px;font-size:14px">Intents que se crearán:</h4>
+          ${intentsHtml}
+          <h4 style="margin:16px 0 8px;font-size:14px">Descripción sugerida:</h4>
+          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;font-size:13px;color:#374151">${esc(t.business_description)}</div>
+          <h4 style="margin:16px 0 8px;font-size:14px">Info extra sugerida (con formato):</h4>
+          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;font-size:13px;color:#374151;white-space:pre-wrap;font-family:monospace">${esc(t.extra_info)}</div>
+        `;
+
+        document.getElementById("templatePreviewModal").classList.add("open");
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function closeTemplatePreview() {
+      document.getElementById("templatePreviewModal").classList.remove("open");
+    }
+
+    async function applyCurrentTemplate() {
+      if (!_currentTemplateId) return;
+      const msgEl = document.getElementById("previewMsg");
+      const btn = document.getElementById("applyTemplateBtn");
+      msgEl.style.display = "none";
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Aplicando...';
+
+      try {
+        const res = await fetch(`${API}/business/${businessId}/apply-template`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template_id: _currentTemplateId }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        const result = await res.json();
+
+        const parts = [];
+        parts.push(`${result.intents_created} intent(s) creado(s)`);
+        if (result.intents_skipped.length) {
+          parts.push(`${result.intents_skipped.length} saltado(s) (ya existían: ${result.intents_skipped.join(", ")})`);
+        }
+        const textUpdates = [];
+        if (result.business_description_updated) textUpdates.push("descripción");
+        if (result.extra_info_updated) textUpdates.push("info extra");
+        if (result.welcome_updated) textUpdates.push("bienvenida");
+        if (textUpdates.length) parts.push(`${textUpdates.join(", ")} actualizado(s)`);
+
+        msgEl.className = "success-msg";
+        msgEl.textContent = "✅ " + parts.join(". ") + ".";
+        msgEl.style.display = "block";
+
+        await loadIntents();
+
+        setTimeout(() => {
+          closeTemplatePreview();
+          closeTemplatesModal();
+        }, 2500);
+      } catch (e) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = "Error: " + e.message;
+        msgEl.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
     }
 
     /* ── Traducir todos los intents ──────────────────────────────── */
