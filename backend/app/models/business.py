@@ -44,6 +44,9 @@ class Business(Base):
     landing_enabled = Column(Boolean, default=False, nullable=False)
     # Visual template for the landing page: "clean" | "elegant" | "minimal" | "warm"
     landing_theme = Column(String(20), default="clean", nullable=False)
+    # Optional external image URL for the landing header (logo). No upload — admin
+    # points at an image hosted elsewhere (their own CDN, Imgur, Cloudinary…).
+    logo_url = Column(String(500), default="")
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

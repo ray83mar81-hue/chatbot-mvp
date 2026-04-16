@@ -49,6 +49,7 @@ class LandingSettings(BaseModel):
     slug: str | None = None
     landing_enabled: bool = False
     theme: str = "clean"
+    logo_url: str = ""
     public_url: str | None = None  # computed — built by the server
 
 
@@ -56,6 +57,7 @@ class LandingUpdate(BaseModel):
     slug: str | None = None
     landing_enabled: bool | None = None
     theme: str | None = None
+    logo_url: str | None = None
 
 
 @router.get("/business/{business_id}/landing", response_model=LandingSettings)
@@ -78,6 +80,7 @@ def get_landing(
         slug=business.slug,
         landing_enabled=bool(business.landing_enabled),
         theme=business.landing_theme or "clean",
+        logo_url=business.logo_url or "",
         public_url=public_url,
     )
 
@@ -131,6 +134,12 @@ def update_landing(
             raise HTTPException(status_code=422, detail=f"Plantilla inválida. Usa una de: {', '.join(sorted(VALID_THEMES))}")
         business.landing_theme = data.theme
 
+    if data.logo_url is not None:
+        url = data.logo_url.strip()
+        if url and not (url.startswith("http://") or url.startswith("https://")):
+            raise HTTPException(status_code=422, detail="La URL del logo debe empezar por http:// o https://")
+        business.logo_url = url
+
     db.commit()
     db.refresh(business)
 
@@ -142,6 +151,7 @@ def update_landing(
         slug=business.slug,
         landing_enabled=bool(business.landing_enabled),
         theme=business.landing_theme or "clean",
+        logo_url=business.logo_url or "",
         public_url=public_url,
     )
 
@@ -221,42 +231,49 @@ LABELS = {
         "contact": "Contacto", "schedule": "Horarios", "address": "Dirección",
         "more": "Más información", "call": "Llamar", "email": "Enviar email",
         "whatsapp": "WhatsApp", "chat_cta": "Chatear con nosotros",
+        "share": "Compartir", "share_copied": "Enlace copiado",
         "powered": "Este negocio usa Chatbot MVP",
     },
     "en": {
         "contact": "Contact", "schedule": "Hours", "address": "Address",
         "more": "More info", "call": "Call", "email": "Email",
         "whatsapp": "WhatsApp", "chat_cta": "Chat with us",
+        "share": "Share", "share_copied": "Link copied",
         "powered": "This business uses Chatbot MVP",
     },
     "ca": {
         "contact": "Contacte", "schedule": "Horaris", "address": "Adreça",
         "more": "Més informació", "call": "Trucar", "email": "Enviar email",
         "whatsapp": "WhatsApp", "chat_cta": "Xateja amb nosaltres",
+        "share": "Compartir", "share_copied": "Enllaç copiat",
         "powered": "Aquest negoci fa servir Chatbot MVP",
     },
     "fr": {
         "contact": "Contact", "schedule": "Horaires", "address": "Adresse",
         "more": "Plus d'infos", "call": "Appeler", "email": "Email",
         "whatsapp": "WhatsApp", "chat_cta": "Discuter avec nous",
+        "share": "Partager", "share_copied": "Lien copié",
         "powered": "Cette entreprise utilise Chatbot MVP",
     },
     "de": {
         "contact": "Kontakt", "schedule": "Öffnungszeiten", "address": "Adresse",
         "more": "Mehr Infos", "call": "Anrufen", "email": "E-Mail",
         "whatsapp": "WhatsApp", "chat_cta": "Mit uns chatten",
+        "share": "Teilen", "share_copied": "Link kopiert",
         "powered": "Dieses Unternehmen nutzt Chatbot MVP",
     },
     "it": {
         "contact": "Contatti", "schedule": "Orari", "address": "Indirizzo",
         "more": "Altre info", "call": "Chiama", "email": "Email",
         "whatsapp": "WhatsApp", "chat_cta": "Chatta con noi",
+        "share": "Condividi", "share_copied": "Link copiato",
         "powered": "Questa attività usa Chatbot MVP",
     },
     "pt": {
         "contact": "Contacto", "schedule": "Horários", "address": "Morada",
         "more": "Mais info", "call": "Ligar", "email": "Email",
         "whatsapp": "WhatsApp", "chat_cta": "Fala connosco",
+        "share": "Partilhar", "share_copied": "Link copiado",
         "powered": "Este negócio usa Chatbot MVP",
     },
 }
@@ -465,17 +482,65 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
   <meta property="og:description" content="{_esc(meta_desc)}" />
   <meta property="og:type" content="business.business" />
   <meta property="og:url" content="{_esc(public_url)}" />
+  {'<meta property="og:image" content="' + _esc(business.logo_url) + '" />' if business.logo_url else ''}
   <link rel="canonical" href="{_esc(public_url)}" />
   <script type="application/ld+json">{jsonld}</script>
-  <style>{_theme_css(business.landing_theme or "clean", color)}</style>
+  <style>
+    {_theme_css(business.landing_theme or "clean", color)}
+    .logo-wrap {{ margin-bottom: 20px; }}
+    .logo-wrap img {{ max-height: 80px; max-width: 240px; object-fit: contain; }}
+    .share-btn {{
+      position: absolute; top: 16px; left: 24px;
+      background: rgba(255,255,255,.15); backdrop-filter: blur(8px);
+      color: #fff; border: none; padding: 6px 14px; border-radius: 999px;
+      font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex;
+      align-items: center; gap: 6px; transition: background .15s;
+    }}
+    .share-btn:hover {{ background: rgba(255,255,255,.28); }}
+    .share-btn svg {{ width: 14px; height: 14px; fill: currentColor; }}
+    .share-toast {{
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111827; color: #fff; padding: 10px 20px; border-radius: 999px;
+      font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s;
+      z-index: 999;
+    }}
+    .share-toast.show {{ opacity: 1; }}
+  </style>
 </head>
 <body>
   <header class="hero" style="position:relative">
+    <button type="button" class="share-btn" onclick="sharePage()" aria-label="{_esc(labels["share"])}">
+      <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92 0-1.61-1.31-2.92-2.92-2.92z"/></svg>
+      {_esc(labels["share"])}
+    </button>
     <div class="lang-switcher">{lang_links}</div>
+    {'<div class="logo-wrap"><img src="' + _esc(business.logo_url) + '" alt="' + _esc(t["name"]) + '" /></div>' if business.logo_url else ''}
     <h1>{_esc(t["name"])}</h1>
     <p>{_esc(t["description"])}</p>
     <a href="#chat" class="btn-primary" onclick="document.querySelector('.cw-bubble')?.click();return false;">{_esc(labels["chat_cta"])}</a>
   </header>
+  <div class="share-toast" id="shareToast">{_esc(labels["share_copied"])}</div>
+  <script>
+    async function sharePage() {{
+      const data = {{
+        title: {json.dumps(t["name"])},
+        text: {json.dumps(meta_desc)},
+        url: {json.dumps(public_url)},
+      }};
+      try {{
+        if (navigator.share) {{
+          await navigator.share(data);
+        }} else if (navigator.clipboard) {{
+          await navigator.clipboard.writeText(data.url);
+          const toast = document.getElementById('shareToast');
+          toast.classList.add('show');
+          setTimeout(() => toast.classList.remove('show'), 2000);
+        }} else {{
+          window.prompt('Copia este enlace:', data.url);
+        }}
+      }} catch (e) {{ /* user cancelled or error — silently ignore */ }}
+    }}
+  </script>
 
   <main>
     <section class="card">

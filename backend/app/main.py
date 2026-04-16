@@ -97,6 +97,7 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "slug", "VARCHAR(100)"),
     ("businesses", "landing_enabled", "BOOLEAN DEFAULT FALSE NOT NULL"),
     ("businesses", "landing_theme", "VARCHAR(20) DEFAULT 'clean' NOT NULL"),
+    ("businesses", "logo_url", "VARCHAR(500) DEFAULT ''"),
 ]
 
 
