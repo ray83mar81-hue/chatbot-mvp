@@ -924,9 +924,59 @@
   contactHdrBtn.addEventListener("click", showContactForm);
   contactBackBtn.addEventListener("click", hideContactForm);
 
+  // ── Inline per-field validation ──────────────────────────────
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  function _showFieldError(fieldName, messageKey) {
+    // Messages per language for individual fields. Fall back to Spanish if
+    // the key doesn't exist for the active language.
+    const msgs = {
+      es: { nameShort: "El nombre debe tener al menos 2 caracteres", emailInvalid: "Email no válido", phoneShort: "Teléfono demasiado corto" },
+      en: { nameShort: "Name must be at least 2 characters", emailInvalid: "Invalid email", phoneShort: "Phone number too short" },
+      ca: { nameShort: "El nom ha de tenir almenys 2 caràcters", emailInvalid: "Email no vàlid", phoneShort: "Telèfon massa curt" },
+      fr: { nameShort: "Le nom doit contenir au moins 2 caractères", emailInvalid: "Email non valide", phoneShort: "Numéro de téléphone trop court" },
+      de: { nameShort: "Name muss mindestens 2 Zeichen haben", emailInvalid: "Ungültige E-Mail", phoneShort: "Telefonnummer zu kurz" },
+      it: { nameShort: "Il nome deve avere almeno 2 caratteri", emailInvalid: "Email non valida", phoneShort: "Numero di telefono troppo corto" },
+      pt: { nameShort: "O nome deve ter pelo menos 2 caracteres", emailInvalid: "Email inválido", phoneShort: "Telefone demasiado curto" },
+    };
+    const msg = (msgs[state.currentLang] || msgs.es)[messageKey] || messageKey;
+    // Find the input and mark it red with a small error line below
+    const input = contactForm.querySelector(`[name="${fieldName}"]`);
+    if (!input) return;
+    input.style.borderColor = "#dc2626";
+    const field = input.closest(".cw-field") || input.parentElement;
+    let errEl = field.querySelector(".cw-field-err");
+    if (!errEl) {
+      errEl = document.createElement("div");
+      errEl.className = "cw-field-err";
+      errEl.style.cssText = "color:#dc2626;font-size:12px;margin-top:4px";
+      field.appendChild(errEl);
+    }
+    errEl.textContent = msg;
+    input.focus();
+  }
+
+  function _clearFieldErrors() {
+    contactForm.querySelectorAll(".cw-field-err").forEach(el => el.remove());
+    contactForm.querySelectorAll("input, textarea").forEach(el => {
+      el.style.borderColor = "";
+    });
+  }
+
+  // Clear a field's error as soon as the user edits it
+  contactForm.addEventListener("input", (e) => {
+    const input = e.target;
+    if (input.tagName !== "INPUT" && input.tagName !== "TEXTAREA") return;
+    const field = input.closest(".cw-field") || input.parentElement;
+    const errEl = field && field.querySelector(".cw-field-err");
+    if (errEl) errEl.remove();
+    input.style.borderColor = "";
+  });
+
   contactForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     contactFeedback.innerHTML = "";
+    _clearFieldErrors();
 
     const fd = new FormData(contactForm);
     const name = (fd.get("name") || "").trim();
@@ -937,7 +987,36 @@
     const whatsapp = !!fd.get("whatsapp_opt_in");
     const honeypot = (fd.get("website") || "").trim();
 
-    if (!name || !phone || !email || !message) {
+    // Per-field validation with specific error messages right below the
+    // offending input. Stops at the first problem so the user fixes one at
+    // a time instead of seeing a wall of red.
+    if (!name || name.length < 2) {
+      _showFieldError(name ? "name" : "name", name ? "nameShort" : "nameShort");
+      // Use generic "required" when truly empty to match existing i18n
+      if (!name) { contactFeedback.className = "cw-contact-msg cw-contact-msg-err"; contactFeedback.textContent = t("contactRequired"); }
+      return;
+    }
+    if (!phone) {
+      contactFeedback.className = "cw-contact-msg cw-contact-msg-err";
+      contactFeedback.textContent = t("contactRequired");
+      _showFieldError("phone", "phoneShort");
+      return;
+    }
+    if (phone.replace(/\D/g, "").length < 6) {
+      _showFieldError("phone", "phoneShort");
+      return;
+    }
+    if (!email) {
+      contactFeedback.className = "cw-contact-msg cw-contact-msg-err";
+      contactFeedback.textContent = t("contactRequired");
+      _showFieldError("email", "emailInvalid");
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      _showFieldError("email", "emailInvalid");
+      return;
+    }
+    if (!message) {
       contactFeedback.className = "cw-contact-msg cw-contact-msg-err";
       contactFeedback.textContent = t("contactRequired");
       return;
@@ -974,8 +1053,15 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
 
       contactForm.reset();
+      _clearFieldErrors();
       contactFeedback.className = "cw-contact-msg cw-contact-msg-ok";
       contactFeedback.textContent = t("contactSuccess");
+      // Auto-return to the chat view after 3s so the user sees the confirmation
+      // but doesn't have to click "Volver al chat" manually.
+      setTimeout(() => {
+        hideContactForm();
+        contactFeedback.innerHTML = "";
+      }, 3000);
     } catch (err) {
       contactFeedback.className = "cw-contact-msg cw-contact-msg-err";
       contactFeedback.textContent = t("contactError");
