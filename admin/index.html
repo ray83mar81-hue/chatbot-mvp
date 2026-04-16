@@ -35,6 +35,14 @@
     .error-msg { color: #ef4444; font-size: 13px; margin-top: 8px; }
     .success-msg { color: #10b981; font-size: 13px; margin-top: 8px; }
 
+    /* ── Markdown toolbar ──────────────────────────── */
+    .md-toolbar { display: flex; gap: 2px; background: #f9fafb; border: 1px solid #d1d5db; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; padding: 4px; }
+    .md-toolbar button { background: transparent; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; color: #4b5563; font-weight: 600; }
+    .md-toolbar button:hover { background: #e5e7eb; color: #111827; }
+    .md-toolbar button:active { background: #d1d5db; }
+    .md-toolbar-wrap + textarea { border-top-left-radius: 0; border-top-right-radius: 0; border-top: none; }
+    .md-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
     /* ── Layout ────────────────────────────────────── */
     .app { display: none; }
     .sidebar {
@@ -2096,6 +2104,81 @@
       }
     }
 
+    /* ── Markdown toolbar helpers ──────────────────────────────── */
+    function mdToolbarHtml() {
+      return `<div class="md-toolbar-wrap">
+        <div class="md-toolbar">
+          <button type="button" onclick="mdWrap(this, '**', '**')" title="Negrita (Ctrl+B)"><strong>B</strong></button>
+          <button type="button" onclick="mdWrap(this, '*', '*')" title="Cursiva (Ctrl+I)"><em>I</em></button>
+          <button type="button" onclick="mdBullet(this)" title="Lista con viñetas">• Lista</button>
+          <button type="button" onclick="mdLink(this)" title="Enlace">🔗 Enlace</button>
+          <button type="button" onclick="mdParagraph(this)" title="Nuevo párrafo">¶</button>
+        </div>
+      </div>`;
+    }
+
+    // Find the textarea that the toolbar belongs to (next sibling of the toolbar wrap)
+    function _mdTextareaFor(btn) {
+      const wrap = btn.closest(".md-toolbar-wrap");
+      return wrap ? wrap.nextElementSibling : null;
+    }
+
+    function mdWrap(btn, pre, post) {
+      const ta = _mdTextareaFor(btn);
+      if (!ta) return;
+      const start = ta.selectionStart, end = ta.selectionEnd;
+      const selected = ta.value.substring(start, end) || "texto";
+      const before = ta.value.substring(0, start);
+      const after = ta.value.substring(end);
+      ta.value = before + pre + selected + post + after;
+      ta.focus();
+      ta.selectionStart = start + pre.length;
+      ta.selectionEnd = start + pre.length + selected.length;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function mdBullet(btn) {
+      const ta = _mdTextareaFor(btn);
+      if (!ta) return;
+      const start = ta.selectionStart, end = ta.selectionEnd;
+      // Expand selection to full lines
+      const lineStart = ta.value.lastIndexOf("\n", start - 1) + 1;
+      let lineEnd = ta.value.indexOf("\n", end);
+      if (lineEnd === -1) lineEnd = ta.value.length;
+      const block = ta.value.substring(lineStart, lineEnd);
+      const prefixed = block.split("\n").map(l => l.startsWith("- ") ? l : ("- " + l)).join("\n");
+      ta.value = ta.value.substring(0, lineStart) + prefixed + ta.value.substring(lineEnd);
+      ta.focus();
+      ta.selectionStart = lineStart;
+      ta.selectionEnd = lineStart + prefixed.length;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function mdLink(btn) {
+      const ta = _mdTextareaFor(btn);
+      if (!ta) return;
+      const url = prompt("URL del enlace (https://...)");
+      if (!url) return;
+      const start = ta.selectionStart, end = ta.selectionEnd;
+      const selected = ta.value.substring(start, end) || "texto del enlace";
+      const md = `[${selected}](${url})`;
+      ta.value = ta.value.substring(0, start) + md + ta.value.substring(end);
+      ta.focus();
+      ta.selectionStart = start + 1;
+      ta.selectionEnd = start + 1 + selected.length;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function mdParagraph(btn) {
+      const ta = _mdTextareaFor(btn);
+      if (!ta) return;
+      const start = ta.selectionStart;
+      ta.value = ta.value.substring(0, start) + "\n\n" + ta.value.substring(start);
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + 2;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
     function renderBizDataTabs() {
       const tabsEl = document.getElementById("bizDataLangTabs");
       const panesEl = document.getElementById("bizDataLangPanes");
@@ -2144,10 +2227,20 @@
             <label>Nombre ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
             <input class="bt-name" data-lang="${code}" value="${esc(t.name)}" />
           </div>
-          <div class="form-group"><label>Descripcion</label><textarea class="bt-description" data-lang="${code}" rows="3">${esc(t.description)}</textarea></div>
+          <div class="form-group">
+            <label>Descripcion</label>
+            ${mdToolbarHtml()}
+            <textarea class="bt-description" data-lang="${code}" rows="3">${esc(t.description)}</textarea>
+            <div class="md-hint">Admite <strong>**negrita**</strong>, <em>*cursiva*</em>, <code>[enlace](url)</code> y viñetas con <code>- item</code>.</div>
+          </div>
           <div class="form-group"><label>Direccion</label><input class="bt-address" data-lang="${code}" value="${esc(t.address)}" /></div>
           <div class="form-group"><label>Horarios (JSON)</label><textarea class="bt-schedule" data-lang="${code}" rows="4">${esc(prettySchedule(t.schedule))}</textarea></div>
-          <div class="form-group"><label>Info extra</label><textarea class="bt-extra" data-lang="${code}" rows="3">${esc(t.extra_info)}</textarea></div>
+          <div class="form-group">
+            <label>Info extra</label>
+            ${mdToolbarHtml()}
+            <textarea class="bt-extra" data-lang="${code}" rows="5">${esc(t.extra_info)}</textarea>
+            <div class="md-hint">Admite negrita, cursiva, enlaces y listas con viñetas. Se mostrará formateado en la página web del negocio.</div>
+          </div>
         `;
         panesEl.appendChild(pane);
       });
