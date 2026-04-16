@@ -548,10 +548,9 @@
 
           <!-- Config -->
           <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05)">
-            <h3 style="font-size:16px;margin-bottom:16px">Textos del widget por idioma</h3>
-            <p style="font-size:12px;color:#6b7280;margin-bottom:12px">Estos textos se muestran en el widget. El código generado usa los del idioma por defecto; el resto se cargan automáticamente según el idioma del usuario.</p>
-            <div class="lang-tabs" id="embedLangTabs"></div>
-            <div id="embedLangPanes"></div>
+            <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:10px 14px;border-radius:6px;font-size:13px;color:#1e40af;margin-bottom:20px">
+              Los textos del widget (título, subtítulo, bienvenida, placeholder) se editan en <strong>Negocio → Widget</strong>. Aquí configuras únicamente el diseño.
+            </div>
             <div class="form-group">
               <label>Color principal</label>
               <div style="display:flex;align-items:center;gap:12px">
@@ -1273,7 +1272,7 @@
         if (section === "conversations") loadConversations();
         if (section === "business") loadBusiness();
         if (section === "contacts") loadContacts();
-        if (section === "embed") { loadBusiness().then(() => { loadEmbedTexts(); updateEmbed(); }); }
+        if (section === "embed") { loadBusiness().then(() => { updateEmbed(); }); }
         if (section === "team") loadTeam();
       });
     });
@@ -2353,9 +2352,8 @@
           if (t.welcome) bizLangState.welcomes[t.language_code] = t.welcome;
         });
 
-        // Also fill contact form texts, widget UI texts and embed texts from defaults
+        // Also fill contact form texts and widget UI texts from defaults
         const srcContact = contactFormState.translations[srcLang] || emptyContactTexts();
-        const srcEmbed = embedTextState.translations ? (embedTextState.translations[srcLang] || emptyEmbedTexts()) : emptyEmbedTexts();
         const srcWidgetUI = bizWidgetState.uiTexts[srcLang] || emptyWidgetUITexts();
 
         const I18N_CONTACT = {
@@ -2400,16 +2398,6 @@
           else if (!ct.privacy_url) ct.privacy_url = srcContact.privacy_url || "";
           contactFormState.translations[code] = ct;
 
-          // Embed texts
-          if (embedTextState.translations) {
-            const et = embedTextState.translations[code] || emptyEmbedTexts();
-            const etDefaults = I18N_EMBED[code] || {};
-            EMBED_TEXT_FIELDS.forEach(f => {
-              if (!et[f.key]) et[f.key] = etDefaults[f.key] || srcEmbed[f.key] || "";
-            });
-            embedTextState.translations[code] = et;
-          }
-
           // Widget UI texts (title, subtitle, placeholder)
           const wui = bizWidgetState.uiTexts[code] || emptyWidgetUITexts();
           const wuiDefaults = I18N_EMBED[code] || {};
@@ -2423,7 +2411,7 @@
         renderBizDataTabs();
         renderWidgetTextFields();
         renderContactLangTabs();
-        if (typeof renderEmbedLangTabs === "function") renderEmbedLangTabs();
+        // renderEmbedLangTabs removed — widget texts now live in Negocio > Widget
 
         msgEl.textContent = `Traducción completada: ${toTranslate.map(c => c.toUpperCase()).join(", ")}. Revisa y aprueba en cada pestaña.`;
         msgEl.className = "success-msg";
@@ -3389,6 +3377,7 @@
     function renderEmbedLangTabs() {
       const tabsEl = document.getElementById("embedLangTabs");
       const panesEl = document.getElementById("embedLangPanes");
+      if (!tabsEl || !panesEl) return;  // UI was removed; no-op for safety
       tabsEl.innerHTML = "";
       panesEl.innerHTML = "";
 
@@ -3464,17 +3453,7 @@
     }
 
     function updateEmbed() {
-      captureEmbedTab();
-      const defaultLang = bizDataState.defaultLang || "es";
-      const defaultTexts = embedTextState.translations[defaultLang] || emptyEmbedTexts();
-      const title = defaultTexts.title || "Chat";
-      const subtitle = defaultTexts.subtitle || "";
-      const welcome = defaultTexts.welcome || "";
-      const placeholder = defaultTexts.placeholder || "";
       const color = document.getElementById("embedColor").value;
-      const position = document.getElementById("embedPosition").value;
-      const width = document.getElementById("embedWidth").value;
-      const height = document.getElementById("embedHeight").value;
       const iconType = document.getElementById("embedIconType").value;
       const emoji = document.getElementById("embedEmoji").value;
       const imageUrl = document.getElementById("embedImageUrl").value;
@@ -3484,23 +3463,17 @@
       document.getElementById("embedEmojiWrap").style.display = iconType === "emoji" ? "block" : "none";
       document.getElementById("embedImageWrap").style.display = iconType === "image" ? "block" : "none";
 
+      // Minimal embed code — everything else (color, size, texts, design) lives
+      // in the backend and is fetched by the widget at startup. This keeps the
+      // client's HTML snippet stable: if the admin later changes color or
+      // texts, the client's website reflects it without re-pasting code.
       const origin = window.location.origin;
-      let attrs = [
-        `  src="${origin}/widget/chat-widget.js"`,
-        `  data-api-url="${origin}"`,
-        `  data-business-id="${businessId}"`,
-        `  data-title="${title}"`,
-        `  data-subtitle="${subtitle}"`,
-        `  data-welcome="${welcome}"`,
-        `  data-primary-color="${color}"`,
-        `  data-position="${position}"`,
-      ];
-      if (width !== "380") attrs.push(`  data-width="${width}"`);
-      if (height !== "540") attrs.push(`  data-height="${height}"`);
-      if (iconType === "emoji") attrs.push(`  data-bubble-emoji="${emoji}"`);
-      if (iconType === "image" && imageUrl) attrs.push(`  data-bubble-image="${imageUrl}"`);
-
-      const code = `<script\n${attrs.join("\n")}\n><\/script>`;
+      const code =
+        `<script\n` +
+        `  src="${origin}/widget/chat-widget.js"\n` +
+        `  data-api-url="${origin}"\n` +
+        `  data-business-id="${businessId}"\n` +
+        `></script>`;
       document.getElementById("embedCodeText").textContent = code;
 
       // Preview
