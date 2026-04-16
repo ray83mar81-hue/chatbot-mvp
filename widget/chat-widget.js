@@ -41,7 +41,7 @@
     const timer = setTimeout(() => ctrl.abort(), 2000);
     const res = await fetch(
       `${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`,
-      { signal: ctrl.signal }
+      { signal: ctrl.signal, cache: "no-store" }
     );
     clearTimeout(timer);
     if (res.ok) {
