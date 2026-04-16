@@ -250,6 +250,8 @@
         bottom: 0; ${CONFIG.position}: 0; border-radius: 0;
       }
       .cw-bubble { bottom: 16px; ${CONFIG.position}: 16px; }
+      /* Extra breathing room above the keyboard when the input is focused */
+      .cw-input-area { padding: 12px 16px 18px; }
     }
 
     /* Header */
@@ -993,12 +995,13 @@
     if (!isMobile() || !isOpen) return;
     const vv = window.visualViewport;
     if (!vv) return;
-    // Top of the viewport might shift when the keyboard pushes the browser
-    // URL bar; honour the offsetTop too.
+    // Anchor the window to the TOP of the visible area (vv.offsetTop accounts
+    // for any URL bar offset) with height equal to the visible area. With
+    // "bottom: 0" the browser put the widget's bottom behind the keyboard.
+    window_.style.top = vv.offsetTop + "px";
+    window_.style.bottom = "auto";
     window_.style.height = vv.height + "px";
-    window_.style.bottom = "0";
-    window_.style.top = "auto";
-    // Keep the input scrolled into view after layout settles
+    // Keep the input scrolled into view once layout settles
     setTimeout(() => {
       if (document.activeElement === input) {
         input.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -1009,8 +1012,8 @@
   function resetWindowSize() {
     if (!isMobile()) return;
     window_.style.height = "";
-    window_.style.bottom = "";
     window_.style.top = "";
+    window_.style.bottom = "";
   }
 
   if (window.visualViewport) {
