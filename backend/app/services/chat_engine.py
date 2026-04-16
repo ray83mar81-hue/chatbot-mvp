@@ -111,6 +111,8 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
     matched = match_intent(request.message, db, request.business_id, language)
 
     button: ChatButton | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
     if matched:
         intent, translation = matched
         response_text = translation.response
@@ -129,7 +131,7 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
         # Exclude the message we just saved (it goes in user_message param)
         history = [m for m in history if m.id != user_msg.id]
 
-        response_text = await generate_ai_response(
+        response_text, tokens_in, tokens_out = await generate_ai_response(
             business=business,
             conversation_history=history,
             user_message=request.message,
@@ -149,6 +151,8 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
         source=source,
         intent_matched_id=intent_id,
         response_time_ms=elapsed_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
     )
     db.add(bot_msg)
     db.commit()
@@ -212,17 +216,21 @@ async def process_message_stream(request: ChatRequest, db: Session):
 
         yield f"data: {_json.dumps({'type': 'start', 'source': 'ai', 'language': language})}\n\n"
         response_text = ""
+        usage: dict = {}
         async for chunk in stream_ai_response(
             business=business,
             conversation_history=history,
             user_message=request.message,
             language=language,
+            usage_out=usage,
         ):
             response_text += chunk
             yield f"data: {_json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
         yield f"data: {_json.dumps({'type': 'end'})}\n\n"
         source = "ai"
         intent_id = None
+        _stream_tokens_in = usage.get("tokens_in")
+        _stream_tokens_out = usage.get("tokens_out")
 
     bot_msg = Message(
         conversation_id=conversation.id,
@@ -231,6 +239,8 @@ async def process_message_stream(request: ChatRequest, db: Session):
         source=source,
         intent_matched_id=intent_id,
         response_time_ms=0,
+        tokens_in=locals().get("_stream_tokens_in"),
+        tokens_out=locals().get("_stream_tokens_out"),
     )
     db.add(bot_msg)
     db.commit()

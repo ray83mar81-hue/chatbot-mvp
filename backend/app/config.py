@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # admin user should become the platform operator.
     SUPERADMIN_EMAIL: str = ""
 
+    # USD per million tokens. Defaults match openai/gpt-4o-mini on OpenRouter.
+    # Update when switching AI_MODEL so the superadmin cost view is accurate.
+    AI_PRICE_INPUT_PER_MILLION: float = 0.15
+    AI_PRICE_OUTPUT_PER_MILLION: float = 0.60
+
     model_config = {"env_file": ".env"}
 
 

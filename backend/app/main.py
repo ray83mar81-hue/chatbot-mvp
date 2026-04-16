@@ -17,7 +17,7 @@ from app.models import (
     IntentTranslation,
     Language,
 )
-from app.routers import auth, business, chat, contact, conversations, intents, languages, metrics
+from app.routers import auth, business, chat, contact, conversations, intents, languages, metrics, superadmin
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -40,6 +40,7 @@ app.include_router(metrics.router)
 app.include_router(auth.router)
 app.include_router(languages.router)
 app.include_router(contact.router)
+app.include_router(superadmin.router)
 
 
 @app.on_event("startup")
@@ -83,6 +84,9 @@ SCHEMA_MIGRATIONS = [
     ("admin_users", "role", "VARCHAR(20) DEFAULT 'client_admin' NOT NULL"),
     # Platform-level tenant suspension
     ("businesses", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
+    # AI token usage tracking (for cost visibility in the superadmin panel)
+    ("messages", "tokens_in", "INTEGER"),
+    ("messages", "tokens_out", "INTEGER"),
 ]
 
 

@@ -232,6 +232,10 @@
       <div class="sidebar-brand">Chatbot MVP</div>
       <div style="padding:0 16px 16px"><span id="roleBadge" style="display:none;font-size:11px;font-weight:600;padding:4px 8px;border-radius:4px"></span></div>
       <nav class="sidebar-nav">
+        <div class="nav-item superadmin-only" data-section="platform" style="display:none;background:#fef3c7;color:#92400e">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          <span>Plataforma</span>
+        </div>
         <div class="nav-item active" data-section="dashboard">
           <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
           <span>Dashboard</span>
@@ -264,6 +268,35 @@
 
     <!-- Main content -->
     <div class="main">
+
+      <!-- Impersonation banner (shown only when superadmin is viewing as a client) -->
+      <div id="impersonationBanner" style="display:none;background:#dc2626;color:#fff;padding:10px 20px;font-size:14px;font-weight:600;position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between">
+        <span>🔴 Viendo como <span id="impersonationName">-</span>. Cualquier cambio afecta a su cuenta.</span>
+        <button onclick="exitImpersonation()" style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600">Salir de impersonación</button>
+      </div>
+
+      <!-- ── Plataforma (superadmin only) ──────────────────── -->
+      <div class="section" id="sec-platform">
+        <div class="page-header"><h2>Plataforma</h2></div>
+
+        <div class="stats-grid" id="platformStats" style="margin-bottom:24px"></div>
+
+        <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+          <h3 style="font-size:18px">Clientes</h3>
+          <button class="btn btn-primary" onclick="openCreateTenantModal()">+ Nuevo cliente</button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Nombre</th><th>Estado</th><th>Conversaciones</th><th>Mensajes</th><th>Tokens</th><th>Coste (USD)</th><th>Última actividad</th><th>Acciones</th></tr></thead>
+            <tbody id="tenantsBody"></tbody>
+          </table>
+        </div>
+
+        <p style="margin-top:16px;font-size:12px;color:#6b7280">
+          Precios usados: <span id="pricingNote">cargando...</span>
+        </p>
+      </div>
 
       <!-- ── Dashboard ──────────────────── -->
       <div class="section active" id="sec-dashboard">
@@ -606,6 +639,28 @@
     </div>
   </div>
 
+  <!-- ═══════ MODAL: New tenant (superadmin only) ═══════ -->
+  <div class="modal-overlay" id="createTenantModal">
+    <div class="modal" style="width:480px">
+      <h3>Crear nuevo cliente</h3>
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 20px">Se crea un nuevo negocio (tenant) y un administrador cliente para gestionarlo.</p>
+      <div class="form-group"><label>Nombre del negocio</label><input id="newTenantName" placeholder="Café López" /></div>
+      <div class="form-group"><label>Idioma por defecto</label>
+        <select id="newTenantLang" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px">
+          <option value="es">Español</option><option value="en">English</option><option value="ca">Català</option>
+          <option value="fr">Français</option><option value="de">Deutsch</option><option value="it">Italiano</option><option value="pt">Português</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Email del admin cliente</label><input id="newTenantEmail" type="email" placeholder="admin@cafelopez.com" /></div>
+      <div class="form-group"><label>Contraseña inicial</label><input id="newTenantPassword" type="text" placeholder="mín 8 caracteres" /></div>
+      <div id="newTenantMsg" style="display:none;margin:12px 0"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeCreateTenantModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitCreateTenant()">Crear cliente</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════ MODAL: Conversation detail ═══════ -->
   <div class="modal-overlay" id="convModal">
     <div class="modal" style="width:600px">
@@ -747,7 +802,8 @@
     function applyRoleToUI() {
       const badge = document.getElementById("roleBadge");
       if (!badge || !currentUser) return;
-      if (currentUser.role === "superadmin") {
+      const isSuper = currentUser.role === "superadmin";
+      if (isSuper) {
         badge.textContent = "Superadmin";
         badge.style.background = "#fee2e2";
         badge.style.color = "#991b1b";
@@ -757,6 +813,182 @@
         badge.style.color = "#1e40af";
       }
       badge.style.display = "inline-block";
+
+      // Show "Plataforma" entry only for superadmins
+      document.querySelectorAll(".superadmin-only").forEach(el => {
+        el.style.display = isSuper ? "" : "none";
+      });
+
+      // Render impersonation banner if superadmin has an active impersonation
+      renderImpersonationBanner();
+    }
+
+    /* ── Impersonation (superadmin view-as) ──────────────────────── */
+    function getImpersonation() {
+      const id = parseInt(localStorage.getItem("impersonating_business_id") || "0", 10);
+      const name = localStorage.getItem("impersonating_name") || "";
+      return id ? { id, name } : null;
+    }
+
+    function renderImpersonationBanner() {
+      const banner = document.getElementById("impersonationBanner");
+      if (!banner) return;
+      if (currentUser && currentUser.role === "superadmin") {
+        const imp = getImpersonation();
+        if (imp) {
+          document.getElementById("impersonationName").textContent = imp.name || `#${imp.id}`;
+          banner.style.display = "flex";
+        } else {
+          banner.style.display = "none";
+        }
+      } else {
+        banner.style.display = "none";
+      }
+    }
+
+    function impersonate(id, name) {
+      localStorage.setItem("impersonating_business_id", String(id));
+      localStorage.setItem("impersonating_name", name || "");
+      localStorage.setItem("admin_business_id", String(id));
+      businessId = id;
+      renderImpersonationBanner();
+      // Navigate to Dashboard (the client-facing view)
+      document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+      const dashItem = document.querySelector('[data-section="dashboard"]');
+      if (dashItem) dashItem.classList.add("active");
+      document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+      document.getElementById("sec-dashboard").classList.add("active");
+      loadDashboard();
+    }
+
+    function exitImpersonation() {
+      localStorage.removeItem("impersonating_business_id");
+      localStorage.removeItem("impersonating_name");
+      renderImpersonationBanner();
+      // Send superadmin back to the platform view
+      document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+      const platItem = document.querySelector('[data-section="platform"]');
+      if (platItem) platItem.classList.add("active");
+      document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+      document.getElementById("sec-platform").classList.add("active");
+      loadPlatform();
+    }
+
+    /* ── Platform view (superadmin) ──────────────────────────────── */
+    async function loadPlatform() {
+      try {
+        const [statsRes, listRes, priceRes] = await Promise.all([
+          fetch(`${API}/superadmin/stats`),
+          fetch(`${API}/superadmin/businesses`),
+          fetch(`${API}/superadmin/pricing`),
+        ]);
+        if (!statsRes.ok || !listRes.ok) throw new Error("Error loading platform");
+        const stats = await statsRes.json();
+        const list = await listRes.json();
+        const pricing = priceRes.ok ? await priceRes.json() : null;
+
+        const grid = document.getElementById("platformStats");
+        grid.innerHTML = `
+          <div class="stat-card"><div class="label">Clientes activos</div><div class="value">${stats.active_businesses} / ${stats.total_businesses}</div></div>
+          <div class="stat-card"><div class="label">Conversaciones (30d)</div><div class="value">${stats.total_conversations_30d}</div></div>
+          <div class="stat-card"><div class="label">Mensajes bot (30d)</div><div class="value">${stats.total_messages_30d}</div></div>
+          <div class="stat-card"><div class="label">Coste IA (30d)</div><div class="value">$${stats.total_cost_usd_30d.toFixed(4)}</div></div>
+        `;
+
+        if (pricing) {
+          document.getElementById("pricingNote").textContent =
+            `${pricing.ai_model} — input $${pricing.input_per_million_usd}/M, output $${pricing.output_per_million_usd}/M`;
+        }
+
+        const tbody = document.getElementById("tenantsBody");
+        if (!list.length) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">No hay clientes. Crea el primero con "+ Nuevo cliente".</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = list.map(t => {
+          const last = t.last_activity ? new Date(t.last_activity).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-";
+          const statusBadge = t.is_active
+            ? `<span class="badge" style="background:#d1fae5;color:#065f46">Activo</span>`
+            : `<span class="badge" style="background:#fee2e2;color:#991b1b">Suspendido</span>`;
+          const totalTokens = (t.tokens_in + t.tokens_out).toLocaleString("es-ES");
+          return `<tr>
+            <td><strong>${esc(t.name)}</strong><div style="font-size:11px;color:#9ca3af">#${t.id} · ${esc(t.admin_emails.join(", ") || "sin admin")}</div></td>
+            <td>${statusBadge}</td>
+            <td>${t.conversations_count}</td>
+            <td>${t.messages_count}</td>
+            <td>${totalTokens}</td>
+            <td>$${t.cost_usd.toFixed(4)}</td>
+            <td>${last}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-secondary btn-sm" onclick="impersonate(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Ver como</button>
+              <button class="btn btn-sm" style="background:${t.is_active ? "#fbbf24" : "#10b981"};color:#fff" onclick="toggleTenantActive(${t.id}, ${!t.is_active})">${t.is_active ? "Suspender" : "Activar"}</button>
+            </td>
+          </tr>`;
+        }).join("");
+      } catch (e) {
+        console.error("loadPlatform", e);
+      }
+    }
+
+    async function toggleTenantActive(id, isActive) {
+      try {
+        const res = await fetch(`${API}/superadmin/businesses/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: isActive }),
+        });
+        if (!res.ok) throw new Error("Error");
+        await loadPlatform();
+      } catch (e) {
+        alert("Error al cambiar estado: " + e.message);
+      }
+    }
+
+    function openCreateTenantModal() {
+      document.getElementById("newTenantName").value = "";
+      document.getElementById("newTenantEmail").value = "";
+      document.getElementById("newTenantPassword").value = "";
+      document.getElementById("newTenantLang").value = "es";
+      document.getElementById("newTenantMsg").style.display = "none";
+      document.getElementById("createTenantModal").classList.add("open");
+    }
+
+    function closeCreateTenantModal() {
+      document.getElementById("createTenantModal").classList.remove("open");
+    }
+
+    async function submitCreateTenant() {
+      const msgEl = document.getElementById("newTenantMsg");
+      msgEl.style.display = "none";
+      const body = {
+        name: document.getElementById("newTenantName").value.trim(),
+        default_language: document.getElementById("newTenantLang").value,
+        admin_email: document.getElementById("newTenantEmail").value.trim(),
+        admin_password: document.getElementById("newTenantPassword").value,
+      };
+      if (!body.name || !body.admin_email || body.admin_password.length < 8) {
+        msgEl.textContent = "Rellena todos los campos (contraseña mín. 8)";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      try {
+        const res = await fetch(`${API}/superadmin/businesses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        closeCreateTenantModal();
+        await loadPlatform();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
     }
 
     /* ════════════════════════════════════════════════
@@ -770,6 +1002,7 @@
         document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
         document.getElementById("sec-" + section).classList.add("active");
 
+        if (section === "platform") loadPlatform();
         if (section === "dashboard") loadDashboard();
         if (section === "intents") loadIntents();
         if (section === "conversations") loadConversations();
@@ -2778,7 +3011,21 @@
     function showApp() {
       document.getElementById("loginPage").style.display = "none";
       document.getElementById("app").style.display = "block";
-      loadDashboard();
+
+      const imp = getImpersonation();
+      const isSuper = currentUser && currentUser.role === "superadmin";
+
+      if (isSuper && !imp) {
+        // Default landing for superadmin: the Platform view
+        document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+        const platItem = document.querySelector('[data-section="platform"]');
+        if (platItem) platItem.classList.add("active");
+        document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+        document.getElementById("sec-platform").classList.add("active");
+        loadPlatform();
+      } else {
+        loadDashboard();
+      }
     }
 
     // Auto-login if token exists — verify by loading /me first

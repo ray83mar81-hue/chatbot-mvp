@@ -101,17 +101,19 @@ def _get_client():
 
 # ── High-level calls ──────────────────────────────────────────────────────
 
-async def _openai_chat(system: str, messages: list[dict], max_tokens: int = 500) -> str:
+async def _openai_chat(system: str, messages: list[dict], max_tokens: int = 500) -> tuple[str, int | None, int | None]:
     client = _get_openai_client()
     resp = await client.chat.completions.create(
         model=settings.AI_MODEL,
         max_tokens=max_tokens,
         messages=[{"role": "system", "content": system}] + messages,
     )
-    return resp.choices[0].message.content or ""
+    text = resp.choices[0].message.content or ""
+    usage = resp.usage
+    return text, (usage.prompt_tokens if usage else None), (usage.completion_tokens if usage else None)
 
 
-async def _anthropic_chat(system: str, messages: list[dict], max_tokens: int = 500) -> str:
+async def _anthropic_chat(system: str, messages: list[dict], max_tokens: int = 500) -> tuple[str, int | None, int | None]:
     client = _get_anthropic_client()
     resp = await client.messages.create(
         model=settings.AI_MODEL,
@@ -119,7 +121,9 @@ async def _anthropic_chat(system: str, messages: list[dict], max_tokens: int = 5
         system=system,
         messages=messages,
     )
-    return resp.content[0].text
+    text = resp.content[0].text
+    usage = getattr(resp, "usage", None)
+    return text, (usage.input_tokens if usage else None), (usage.output_tokens if usage else None)
 
 
 async def generate_ai_response(
@@ -127,8 +131,8 @@ async def generate_ai_response(
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
-) -> str:
-    """Generate a response using the configured provider (OpenAI or Anthropic)."""
+) -> tuple[str, int | None, int | None]:
+    """Generate a response and return (text, tokens_in, tokens_out)."""
     system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
@@ -138,10 +142,11 @@ async def generate_ai_response(
         return await _anthropic_chat(system_prompt, messages)
     except Exception as e:
         print(f"[AI Error] {type(e).__name__}: {e}")
-        return (
+        fallback = (
             f"Lo siento, no puedo responder a eso ahora mismo. "
             f"Puedes contactarnos en {business.phone} o {business.email}."
         )
+        return fallback, None, None
 
 
 async def stream_ai_response(
@@ -149,8 +154,11 @@ async def stream_ai_response(
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
+    usage_out: dict | None = None,
 ) -> AsyncIterator[str]:
-    """Yield text chunks from the configured provider's streaming API."""
+    """Yield text chunks. If usage_out dict is passed, populate it with
+    {'tokens_in': int, 'tokens_out': int} once the stream finishes.
+    """
     system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
@@ -162,11 +170,17 @@ async def stream_ai_response(
                 max_tokens=500,
                 messages=[{"role": "system", "content": system_prompt}] + messages,
                 stream=True,
+                stream_options={"include_usage": True},
             )
             async for chunk in stream:
-                delta = chunk.choices[0].delta.content if chunk.choices else None
-                if delta:
-                    yield delta
+                if chunk.choices:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+                # Last chunk carries usage (when include_usage=True)
+                if usage_out is not None and getattr(chunk, "usage", None):
+                    usage_out["tokens_in"] = chunk.usage.prompt_tokens
+                    usage_out["tokens_out"] = chunk.usage.completion_tokens
         else:
             client = _get_anthropic_client()
             async with client.messages.stream(
@@ -177,6 +191,12 @@ async def stream_ai_response(
             ) as stream:
                 async for text in stream.text_stream:
                     yield text
+                if usage_out is not None:
+                    final = await stream.get_final_message()
+                    u = getattr(final, "usage", None)
+                    if u:
+                        usage_out["tokens_in"] = u.input_tokens
+                        usage_out["tokens_out"] = u.output_tokens
     except Exception as e:
         print(f"[AI Stream Error] {type(e).__name__}: {e}")
         yield (
