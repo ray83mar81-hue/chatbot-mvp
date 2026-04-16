@@ -232,7 +232,7 @@
     .cw-window {
       position: fixed; bottom: 96px; ${CONFIG.position}: 24px; z-index: 99999;
       width: ${CONFIG.width}px; max-width: calc(100vw - 32px);
-      height: ${CONFIG.height}px; max-height: calc(100vh - 120px);
+      height: ${CONFIG.height}px; max-height: calc(100dvh - 120px);
       border-radius: 16px; overflow: hidden;
       background: #fff; display: flex; flex-direction: column;
       box-shadow: 0 8px 32px rgba(0,0,0,.18);
@@ -241,6 +241,16 @@
       pointer-events: none;
     }
     .cw-window.cw-open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+    /* On phones, take (almost) the full screen so the keyboard doesn't cover
+       the input when it pops up. The visualViewport listener further below
+       refines the height when the keyboard is actually showing. */
+    @media (max-width: 600px) {
+      .cw-window {
+        width: 100vw; height: 100dvh; max-width: 100vw; max-height: 100dvh;
+        bottom: 0; ${CONFIG.position}: 0; border-radius: 0;
+      }
+      .cw-bubble { bottom: 16px; ${CONFIG.position}: 16px; }
+    }
 
     /* Header */
     .cw-header {
@@ -968,6 +978,52 @@
   });
 
   sendBtn.addEventListener("click", () => sendMessage(input.value));
+
+  /* ── Mobile keyboard handling ─────────────────────────────────
+     On iOS/Android the on-screen keyboard doesn't resize the layout
+     viewport, so a fixed-positioned window ends up with the input
+     behind the keyboard. visualViewport reports the area actually
+     visible to the user — use it to shrink the window in real time.
+  */
+  function isMobile() {
+    return window.matchMedia("(max-width: 600px)").matches;
+  }
+
+  function adjustForKeyboard() {
+    if (!isMobile() || !isOpen) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    // Top of the viewport might shift when the keyboard pushes the browser
+    // URL bar; honour the offsetTop too.
+    window_.style.height = vv.height + "px";
+    window_.style.bottom = "0";
+    window_.style.top = "auto";
+    // Keep the input scrolled into view after layout settles
+    setTimeout(() => {
+      if (document.activeElement === input) {
+        input.scrollIntoView({ block: "end", behavior: "smooth" });
+      }
+    }, 50);
+  }
+
+  function resetWindowSize() {
+    if (!isMobile()) return;
+    window_.style.height = "";
+    window_.style.bottom = "";
+    window_.style.top = "";
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", adjustForKeyboard);
+    window.visualViewport.addEventListener("scroll", adjustForKeyboard);
+  }
+
+  input.addEventListener("focus", () => {
+    setTimeout(adjustForKeyboard, 100);
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(resetWindowSize, 100);
+  });
 
   /* ── Boot ─────────────────────────────────────────────────── */
   // Pre-fetch languages so the selector is ready before the user opens the bubble

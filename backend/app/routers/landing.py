@@ -569,7 +569,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
 <html lang="{_esc(lang)}">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <title>{_esc(t["name"])}</title>
   <meta name="description" content="{_esc(meta_desc)}" />
   <meta property="og:title" content="{_esc(t["name"])}" />
