@@ -217,7 +217,13 @@ def bulk_delete_intents(
     """Delete EVERY intent of a business in one go. Destructive — requires
     ?confirm=DELETE to avoid accidental fires. Cascade deletes intent
     translations (via SQLAlchemy cascade on the model).
+
+    Messages that matched against these intents in the past keep their
+    history intact — we just null out the intent_matched_id reference
+    before the delete, because the FK has no ON DELETE SET NULL rule.
     """
+    from app.models.message import Message
+
     assert_business_write(current, business_id)
     if confirm != "DELETE":
         raise HTTPException(
@@ -226,6 +232,13 @@ def bulk_delete_intents(
         )
     intents = db.query(Intent).filter(Intent.business_id == business_id).all()
     count = len(intents)
+    if count == 0:
+        return BulkDeleteResult(deleted=0)
+
+    intent_ids = [i.id for i in intents]
+    db.query(Message).filter(Message.intent_matched_id.in_(intent_ids)).update(
+        {Message.intent_matched_id: None}, synchronize_session=False
+    )
     for intent in intents:
         db.delete(intent)
     db.commit()
@@ -297,7 +310,13 @@ def delete_intent(
     current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from app.models.message import Message
+
     intent = _get_intent_and_check_write(intent_id, current, db)
+    # Null out history references so the FK doesn't block the delete
+    db.query(Message).filter(Message.intent_matched_id == intent_id).update(
+        {Message.intent_matched_id: None}, synchronize_session=False
+    )
     db.delete(intent)
     db.commit()
     return {"detail": "Intent deleted"}
