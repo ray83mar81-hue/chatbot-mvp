@@ -356,6 +356,7 @@
           <button type="button" class="lang-tab" data-biztab="idiomas" onclick="switchBizTab('idiomas')">Idiomas</button>
           <button type="button" class="lang-tab" data-biztab="widget" onclick="switchBizTab('widget')">Widget</button>
           <button type="button" class="lang-tab" data-biztab="contacto" onclick="switchBizTab('contacto')">Formulario de contacto</button>
+          <button type="button" class="lang-tab" data-biztab="web" onclick="switchBizTab('web')">Página web</button>
         </div>
 
         <!-- Sub-tab: Datos -->
@@ -448,6 +449,56 @@
 
             <div id="bizContactMsg" style="display:none"></div>
             <button class="btn btn-primary" style="margin-top:12px" onclick="saveBusinessContact()">Guardar contacto</button>
+          </div>
+        </div>
+
+        <!-- Sub-tab: Página web -->
+        <div class="biz-pane" id="bizPane-web">
+          <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-width:720px">
+            <p style="color:#6b7280;font-size:14px;margin-bottom:20px">
+              Si tu negocio no tiene web propia, generamos una página pública con los datos que ya tienes configurados. Incluye el widget embebido, es multi-idioma y viene con metadatos SEO para Google.
+            </p>
+
+            <div class="form-group form-row" style="margin-bottom:16px">
+              <input type="checkbox" id="landingEnabled" />
+              <label for="landingEnabled" style="margin:0;font-weight:600">Publicar página web pública</label>
+            </div>
+
+            <div class="form-group">
+              <label>Slug (URL) <span style="color:#9ca3af;font-weight:400">— letras minúsculas, números y guiones</span></label>
+              <div style="display:flex;align-items:center;gap:4px">
+                <span style="color:#6b7280;font-size:14px">hubdpb.com/negocio/</span>
+                <input id="landingSlug" placeholder="cafe-lopez" style="flex:1" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Plantilla visual</label>
+              <select id="landingTheme" style="width:100%;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px">
+                <option value="clean">Clean — gradiente + tarjetas blancas (actual, recomendada)</option>
+                <option value="elegant">Elegant — fondo oscuro, tipografía serif, look premium</option>
+                <option value="minimal">Minimal — blanco y negro, tipográfico puro</option>
+                <option value="warm">Warm — tonos cálidos, esquinas redondeadas, amigable</option>
+              </select>
+            </div>
+
+            <div id="landingUrlBlock" style="display:none;background:#f9fafb;padding:16px;border-radius:8px;margin:20px 0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+                <input id="landingPublicUrl" readonly style="flex:1;min-width:240px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;font-family:monospace;font-size:13px" />
+                <button class="btn btn-sm" style="background:#e5e7eb;color:#1f2937" onclick="copyLandingUrl()">Copiar</button>
+                <a id="landingPreviewLink" href="#" target="_blank" class="btn btn-sm" style="background:#dbeafe;color:#1e40af;text-decoration:none">Abrir</a>
+              </div>
+              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                <img id="landingQrImg" alt="QR" style="width:140px;height:140px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:4px" />
+                <div style="flex:1;min-width:200px">
+                  <p style="margin:0 0 8px;font-size:13px;color:#6b7280">Descarga este código QR para imprimirlo y ponerlo en tu local. Al escanearlo, los clientes acceden a tu web + chat.</p>
+                  <button class="btn btn-sm btn-primary" onclick="downloadLandingQr()">Descargar QR</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="bizLandingMsg" style="display:none"></div>
+            <button class="btn btn-primary" style="margin-top:12px" onclick="saveLandingSettings()">Guardar</button>
           </div>
         </div>
       </div>
@@ -1916,6 +1967,7 @@
       document.querySelectorAll(".biz-pane").forEach(p => {
         p.classList.toggle("active", p.id === "bizPane-" + tab);
       });
+      if (tab === "web") loadLandingSettings();
     }
 
     /* ════════════════════════════════════════════════
@@ -3149,6 +3201,88 @@
         msgEl.className = "error-msg";
         msgEl.style.display = "block";
       }
+    }
+
+    /* ════════════════════════════════════════════════
+       LANDING PAGE (página web pública)
+       ════════════════════════════════════════════════ */
+    async function loadLandingSettings() {
+      try {
+        const res = await fetch(`${API}/business/${businessId}/landing`);
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById("landingEnabled").checked = !!data.landing_enabled;
+        document.getElementById("landingSlug").value = data.slug || "";
+        if (data.theme) document.getElementById("landingTheme").value = data.theme;
+        renderLandingUrl(data);
+      } catch (e) { console.error("loadLandingSettings", e); }
+    }
+
+    function renderLandingUrl(data) {
+      const block = document.getElementById("landingUrlBlock");
+      if (!data || !data.public_url) { block.style.display = "none"; return; }
+      const url = data.public_url;
+      document.getElementById("landingPublicUrl").value = url;
+      document.getElementById("landingPreviewLink").href = url;
+      // QR via goqr.me free API (client-side, no backend dep)
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(url)}`;
+      document.getElementById("landingQrImg").src = qrSrc;
+      document.getElementById("landingQrImg").dataset.url = url;
+      block.style.display = "block";
+    }
+
+    async function saveLandingSettings() {
+      const msgEl = document.getElementById("bizLandingMsg");
+      msgEl.style.display = "none";
+      const body = {
+        slug: document.getElementById("landingSlug").value.trim().toLowerCase() || null,
+        landing_enabled: document.getElementById("landingEnabled").checked,
+        theme: document.getElementById("landingTheme").value,
+      };
+      try {
+        const res = await fetch(`${API}/business/${businessId}/landing`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        const data = await res.json();
+        renderLandingUrl(data);
+        msgEl.textContent = body.landing_enabled ? "Página publicada correctamente" : "Configuración guardada";
+        msgEl.className = "success-msg";
+        msgEl.style.display = "block";
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
+    }
+
+    function copyLandingUrl() {
+      const input = document.getElementById("landingPublicUrl");
+      navigator.clipboard.writeText(input.value).then(() => {
+        const btn = event.target;
+        const original = btn.textContent;
+        btn.textContent = "Copiado";
+        setTimeout(() => { btn.textContent = original; }, 1500);
+      });
+    }
+
+    function downloadLandingQr() {
+      const img = document.getElementById("landingQrImg");
+      const url = img.dataset.url || "";
+      const slug = document.getElementById("landingSlug").value || "negocio";
+      // Fetch the image and force download
+      fetch(img.src).then(r => r.blob()).then(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `qr-${slug}.png`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
     }
 
     /* ════════════════════════════════════════════════

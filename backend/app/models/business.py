@@ -38,6 +38,13 @@ class Business(Base):
     # Monthly token cap for this tenant (NULL = unlimited). Superadmin sets this.
     monthly_token_quota = Column(Integer, nullable=True)
 
+    # Public landing page (for clients without their own website).
+    # slug is URL-safe identifier, must be unique when set. Served at /negocio/{slug}.
+    slug = Column(String(100), nullable=True, unique=True, index=True)
+    landing_enabled = Column(Boolean, default=False, nullable=False)
+    # Visual template for the landing page: "clean" | "elegant" | "minimal" | "warm"
+    landing_theme = Column(String(20), default="clean", nullable=False)
+
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

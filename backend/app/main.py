@@ -17,7 +17,7 @@ from app.models import (
     IntentTranslation,
     Language,
 )
-from app.routers import auth, business, chat, contact, conversations, intents, languages, metrics, superadmin, tenant_admins
+from app.routers import auth, business, chat, contact, conversations, intents, landing, languages, metrics, superadmin, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -42,6 +42,7 @@ app.include_router(languages.router)
 app.include_router(contact.router)
 app.include_router(superadmin.router)
 app.include_router(tenant_admins.router)
+app.include_router(landing.router)
 
 
 @app.on_event("startup")
@@ -92,6 +93,10 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "monthly_token_quota", "INTEGER"),
     # Within-tenant role: "owner" | "viewer" (read-only safety)
     ("admin_users", "tenant_role", "VARCHAR(20) DEFAULT 'owner' NOT NULL"),
+    # Public landing page for tenants without their own website
+    ("businesses", "slug", "VARCHAR(100)"),
+    ("businesses", "landing_enabled", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    ("businesses", "landing_theme", "VARCHAR(20) DEFAULT 'clean' NOT NULL"),
 ]
 
 
