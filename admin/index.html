@@ -35,12 +35,25 @@
     .error-msg { color: #ef4444; font-size: 13px; margin-top: 8px; }
     .success-msg { color: #10b981; font-size: 13px; margin-top: 8px; }
 
-    /* ── Markdown toolbar ──────────────────────────── */
+    /* ── Markdown toolbar + editor ──────────────────────────── */
     .md-toolbar { display: flex; gap: 2px; background: #f9fafb; border: 1px solid #d1d5db; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; padding: 4px; }
     .md-toolbar button { background: transparent; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; color: #4b5563; font-weight: 600; }
     .md-toolbar button:hover { background: #e5e7eb; color: #111827; }
     .md-toolbar button:active { background: #d1d5db; }
-    .md-toolbar-wrap + textarea { border-top-left-radius: 0; border-top-right-radius: 0; border-top: none; }
+    .md-editor {
+      width: 100%; padding: 10px 14px; border: 1px solid #d1d5db;
+      border-top-left-radius: 0; border-top-right-radius: 0;
+      border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
+      font-family: inherit; font-size: 14px; line-height: 1.5; outline: none;
+      transition: border-color .2s; background: #fff;
+    }
+    .md-editor:focus { border-color: #2563eb; }
+    .md-editor ul { margin: 4px 0 4px 24px; padding: 0; }
+    .md-editor li { margin: 2px 0; }
+    .md-editor a { color: #2563eb; text-decoration: underline; }
+    .md-editor strong { font-weight: 700; }
+    .md-editor em { font-style: italic; }
+    .md-editor:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
     .md-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
 
     /* ── Layout ────────────────────────────────────── */
@@ -2104,79 +2117,140 @@
       }
     }
 
-    /* ── Markdown toolbar helpers ──────────────────────────────── */
-    function mdToolbarHtml() {
-      return `<div class="md-toolbar-wrap">
-        <div class="md-toolbar">
-          <button type="button" onclick="mdWrap(this, '**', '**')" title="Negrita (Ctrl+B)"><strong>B</strong></button>
-          <button type="button" onclick="mdWrap(this, '*', '*')" title="Cursiva (Ctrl+I)"><em>I</em></button>
-          <button type="button" onclick="mdBullet(this)" title="Lista con viñetas">• Lista</button>
-          <button type="button" onclick="mdLink(this)" title="Enlace">🔗 Enlace</button>
-          <button type="button" onclick="mdParagraph(this)" title="Nuevo párrafo">¶</button>
+    /* ── Visual markdown editor ─────────────────────────────────
+       A contenteditable div backed by a hidden textarea. The user sees
+       the formatted text (bold as bold, etc.) but what gets saved is
+       plain markdown so the backend, AI context and data portability
+       stay clean.
+    */
+
+    function mdEditorHtml(code, fieldClass, initialMd, rows) {
+      const html = mdToHtml(esc(initialMd || ""));
+      return `
+        <div class="md-toolbar-wrap">
+          <div class="md-toolbar">
+            <button type="button" onmousedown="event.preventDefault()" onclick="mdExec('bold', this)" title="Negrita"><strong>B</strong></button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="mdExec('italic', this)" title="Cursiva"><em>I</em></button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="mdExec('insertUnorderedList', this)" title="Lista con viñetas">• Lista</button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="mdExecLink(this)" title="Enlace">🔗 Enlace</button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="mdExec('insertParagraph', this)" title="Nuevo párrafo">¶</button>
+          </div>
         </div>
-      </div>`;
+        <div class="md-editor" contenteditable="true" oninput="mdSync(this)" onpaste="mdPaste(event, this)" style="min-height:${(rows || 3) * 22 + 16}px">${html}</div>
+        <textarea class="${fieldClass}" data-lang="${code}" hidden>${esc(initialMd || "")}</textarea>
+      `;
     }
 
-    // Find the textarea that the toolbar belongs to (next sibling of the toolbar wrap)
-    function _mdTextareaFor(btn) {
+    /* ── Markdown ↔ HTML conversion (bold, italic, links, bullets) ── */
+
+    function inlineMdToHtml(s) {
+      // Input is already HTML-escaped by esc(). Convert the 3 inline patterns.
+      s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+        '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+      return s;
+    }
+
+    function mdToHtml(md) {
+      if (!md) return "";
+      const lines = md.split("\n");
+      const out = [];
+      let para = [], inList = false;
+      const flushPara = () => { if (para.length) { out.push("<div>" + inlineMdToHtml(para.join(" ")) + "</div>"); para = []; } };
+      const closeList = () => { if (inList) { out.push("</ul>"); inList = false; } };
+      for (const raw of lines) {
+        const t = raw.trim();
+        if (!t) { flushPara(); closeList(); continue; }
+        if (t.startsWith("- ") || t.startsWith("* ")) {
+          flushPara();
+          if (!inList) { out.push("<ul>"); inList = true; }
+          out.push("<li>" + inlineMdToHtml(t.slice(2)) + "</li>");
+        } else {
+          closeList();
+          para.push(t);
+        }
+      }
+      flushPara(); closeList();
+      return out.join("");
+    }
+
+    function htmlToMd(html) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      let md = _walkMd(tmp);
+      // Collapse 3+ newlines to 2
+      md = md.replace(/\n{3,}/g, "\n\n").trim();
+      return md;
+    }
+
+    function _walkMd(node) {
+      let out = "";
+      node.childNodes.forEach(child => {
+        if (child.nodeType === 3) {
+          out += child.textContent;
+          return;
+        }
+        if (child.nodeType !== 1) return;
+        const tag = child.tagName.toLowerCase();
+        const inner = _walkMd(child);
+        if (tag === "strong" || tag === "b") out += "**" + inner + "**";
+        else if (tag === "em" || tag === "i") out += "*" + inner + "*";
+        else if (tag === "a") {
+          const href = child.getAttribute("href") || "";
+          out += "[" + inner + "](" + href + ")";
+        }
+        else if (tag === "ul" || tag === "ol") out += "\n" + inner + "\n";
+        else if (tag === "li") out += "- " + inner.trim() + "\n";
+        else if (tag === "br") out += "\n";
+        else if (tag === "p" || tag === "div") out += (out && !out.endsWith("\n") ? "\n" : "") + inner + "\n";
+        else out += inner;
+      });
+      return out;
+    }
+
+    /* ── Editor actions ─────────────────────────────────────────── */
+
+    function _mdEditorFor(btn) {
       const wrap = btn.closest(".md-toolbar-wrap");
       return wrap ? wrap.nextElementSibling : null;
     }
 
-    function mdWrap(btn, pre, post) {
-      const ta = _mdTextareaFor(btn);
-      if (!ta) return;
-      const start = ta.selectionStart, end = ta.selectionEnd;
-      const selected = ta.value.substring(start, end) || "texto";
-      const before = ta.value.substring(0, start);
-      const after = ta.value.substring(end);
-      ta.value = before + pre + selected + post + after;
-      ta.focus();
-      ta.selectionStart = start + pre.length;
-      ta.selectionEnd = start + pre.length + selected.length;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    function mdExec(cmd, btn) {
+      const editor = _mdEditorFor(btn);
+      if (!editor) return;
+      editor.focus();
+      document.execCommand(cmd, false, null);
+      mdSync(editor);
     }
 
-    function mdBullet(btn) {
-      const ta = _mdTextareaFor(btn);
-      if (!ta) return;
-      const start = ta.selectionStart, end = ta.selectionEnd;
-      // Expand selection to full lines
-      const lineStart = ta.value.lastIndexOf("\n", start - 1) + 1;
-      let lineEnd = ta.value.indexOf("\n", end);
-      if (lineEnd === -1) lineEnd = ta.value.length;
-      const block = ta.value.substring(lineStart, lineEnd);
-      const prefixed = block.split("\n").map(l => l.startsWith("- ") ? l : ("- " + l)).join("\n");
-      ta.value = ta.value.substring(0, lineStart) + prefixed + ta.value.substring(lineEnd);
-      ta.focus();
-      ta.selectionStart = lineStart;
-      ta.selectionEnd = lineStart + prefixed.length;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-
-    function mdLink(btn) {
-      const ta = _mdTextareaFor(btn);
-      if (!ta) return;
+    function mdExecLink(btn) {
       const url = prompt("URL del enlace (https://...)");
       if (!url) return;
-      const start = ta.selectionStart, end = ta.selectionEnd;
-      const selected = ta.value.substring(start, end) || "texto del enlace";
-      const md = `[${selected}](${url})`;
-      ta.value = ta.value.substring(0, start) + md + ta.value.substring(end);
-      ta.focus();
-      ta.selectionStart = start + 1;
-      ta.selectionEnd = start + 1 + selected.length;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      const editor = _mdEditorFor(btn);
+      if (!editor) return;
+      editor.focus();
+      document.execCommand("createLink", false, url);
+      // Ensure the link opens in a new tab
+      editor.querySelectorAll('a[href="' + url + '"]').forEach(a => {
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener noreferrer");
+      });
+      mdSync(editor);
     }
 
-    function mdParagraph(btn) {
-      const ta = _mdTextareaFor(btn);
-      if (!ta) return;
-      const start = ta.selectionStart;
-      ta.value = ta.value.substring(0, start) + "\n\n" + ta.value.substring(start);
-      ta.focus();
-      ta.selectionStart = ta.selectionEnd = start + 2;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    function mdPaste(e, editor) {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData("text/plain");
+      document.execCommand("insertText", false, text);
+      mdSync(editor);
+    }
+
+    function mdSync(editor) {
+      // Find the hidden textarea sibling — search within the nearest lang-pane or form-group
+      const group = editor.closest(".form-group") || editor.parentElement;
+      const ta = group ? group.querySelector("textarea[hidden]") : null;
+      if (ta) ta.value = htmlToMd(editor.innerHTML);
     }
 
     function renderBizDataTabs() {
@@ -2229,17 +2303,15 @@
           </div>
           <div class="form-group">
             <label>Descripcion</label>
-            ${mdToolbarHtml()}
-            <textarea class="bt-description" data-lang="${code}" rows="3">${esc(t.description)}</textarea>
-            <div class="md-hint">Admite <strong>**negrita**</strong>, <em>*cursiva*</em>, <code>[enlace](url)</code> y viñetas con <code>- item</code>.</div>
+            ${mdEditorHtml(code, "bt-description", t.description, 3)}
+            <div class="md-hint">Usa los botones para dar formato. Los cambios se guardan en markdown.</div>
           </div>
           <div class="form-group"><label>Direccion</label><input class="bt-address" data-lang="${code}" value="${esc(t.address)}" /></div>
           <div class="form-group"><label>Horarios (JSON)</label><textarea class="bt-schedule" data-lang="${code}" rows="4">${esc(prettySchedule(t.schedule))}</textarea></div>
           <div class="form-group">
             <label>Info extra</label>
-            ${mdToolbarHtml()}
-            <textarea class="bt-extra" data-lang="${code}" rows="5">${esc(t.extra_info)}</textarea>
-            <div class="md-hint">Admite negrita, cursiva, enlaces y listas con viñetas. Se mostrará formateado en la página web del negocio.</div>
+            ${mdEditorHtml(code, "bt-extra", t.extra_info, 5)}
+            <div class="md-hint">Negrita, cursiva, enlaces y listas. Se mostrará formateado en la página web del negocio.</div>
           </div>
         `;
         panesEl.appendChild(pane);
