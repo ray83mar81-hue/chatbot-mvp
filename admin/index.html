@@ -2012,30 +2012,72 @@ Haz una última pasada mental:
       document.getElementById("aiPromptText").value = _buildAiPrompt(info);
     }
 
+    function _formatSchedule(sch) {
+      // schedule might be: {lunes: "9-18"}, {horarios: {lunes: "9-18"}},
+      // or nested structures. Flatten one level if needed and stringify
+      // any remaining objects as "lunes 9-18, martes 9-18".
+      if (!sch || typeof sch !== "object") return "";
+      let entries = Object.entries(sch);
+      // If the only top-level entry is a wrapper ("horarios": {...}), unwrap it
+      if (entries.length === 1 && typeof entries[0][1] === "object" && entries[0][1] !== null) {
+        const inner = entries[0][1];
+        if (typeof inner === "object") entries = Object.entries(inner);
+      }
+      const lines = [];
+      for (const [k, v] of entries) {
+        if (v == null) continue;
+        if (typeof v === "string" || typeof v === "number") {
+          lines.push(`  - ${k}: ${v}`);
+        } else if (typeof v === "object") {
+          // e.g. {open: "9", close: "18"} → "9 - 18"; otherwise compact JSON
+          const vals = Object.values(v).filter(x => typeof x === "string" || typeof x === "number");
+          lines.push(`  - ${k}: ${vals.length ? vals.join(" - ") : JSON.stringify(v)}`);
+        }
+      }
+      return lines.join("\n");
+    }
+
     async function openAiPromptModal() {
-      // Pre-fill business info from the current business data, if available
+      // Pre-fill business info from the current business data, if available.
+      // Prefer the default-language translation for description / extra_info
+      // since that's where the admin actually edits them.
       let bizInfo = "";
       try {
-        const res = await fetch(`${API}/business/${businessId}`);
-        if (res.ok) {
-          const b = await res.json();
-          const parts = [];
-          if (b.name) parts.push(`Nombre: ${b.name}`);
-          if (b.description) parts.push(`Descripción: ${b.description}`);
-          if (b.address) parts.push(`Dirección: ${b.address}`);
-          if (b.phone) parts.push(`Teléfono: ${b.phone}`);
-          if (b.email) parts.push(`Email: ${b.email}`);
-          if (b.schedule && b.schedule !== "{}") {
-            try {
-              const sch = JSON.parse(b.schedule);
-              if (Object.keys(sch).length) {
-                parts.push("Horarios:\n" + Object.entries(sch).map(([d, h]) => `  - ${d}: ${h}`).join("\n"));
-              }
-            } catch (e) {}
+        const [bizRes, langsRes, transRes] = await Promise.all([
+          fetch(`${API}/business/${businessId}`),
+          fetch(`${API}/business/${businessId}/languages`),
+          fetch(`${API}/business/${businessId}/translations`),
+        ]);
+        const b = bizRes.ok ? await bizRes.json() : {};
+        const langsData = langsRes.ok ? await langsRes.json() : {};
+        const translations = transRes.ok ? await transRes.json() : [];
+        const defaultLang = langsData.default_language || "es";
+        const defaultTrans = translations.find(t => t.language_code === defaultLang) || {};
+
+        const name = (defaultTrans.name || b.name || "").trim();
+        const description = (defaultTrans.description || b.description || "").trim();
+        const address = (defaultTrans.address || b.address || "").trim();
+        const extraInfo = (defaultTrans.extra_info || b.extra_info || "").trim();
+        const scheduleRaw = (defaultTrans.schedule || b.schedule || "").trim();
+
+        const parts = [];
+        if (name) parts.push(`Nombre: ${name}`);
+        if (description) parts.push(`Descripción: ${description}`);
+        if (address) parts.push(`Dirección: ${address}`);
+        if (b.phone) parts.push(`Teléfono: ${b.phone}`);
+        if (b.email) parts.push(`Email: ${b.email}`);
+        if (scheduleRaw && scheduleRaw !== "{}") {
+          try {
+            const sch = JSON.parse(scheduleRaw);
+            const formatted = _formatSchedule(sch);
+            if (formatted) parts.push(`Horarios:\n${formatted}`);
+          } catch (e) {
+            // not valid JSON — include as plain text so the AI has something
+            parts.push(`Horarios:\n  ${scheduleRaw}`);
           }
-          if (b.extra_info) parts.push(`Información extra:\n${b.extra_info}`);
-          bizInfo = parts.join("\n\n");
         }
+        if (extraInfo) parts.push(`Información extra:\n${extraInfo}`);
+        bizInfo = parts.join("\n\n");
       } catch (e) { /* non-critical */ }
 
       document.getElementById("aiPromptBizInfo").value = bizInfo;
