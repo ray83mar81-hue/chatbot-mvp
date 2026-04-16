@@ -30,6 +30,100 @@ def _esc(s: str | None) -> str:
     return html.escape(s or "", quote=True)
 
 
+# ── Markdown-lite ────────────────────────────────────────────────────
+# A tiny subset: bold (**x**), italic (*x*), links ([text](url)), and
+# line-start bullets (- x or * x). Everything is HTML-escaped BEFORE
+# markdown replacements so the user's text can never inject tags.
+_BOLD_RE = re.compile(r"\*\*([^*]+?)\*\*")
+_ITALIC_RE = re.compile(r"(?<!\*)\*([^*\n]+?)\*(?!\*)")
+_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+_SAFE_SCHEMES = ("http://", "https://", "mailto:", "tel:")
+
+
+def _safe_url(url: str) -> str:
+    u = url.strip()
+    if not u.lower().startswith(_SAFE_SCHEMES):
+        return ""
+    return u
+
+
+def _render_inline_md(text: str) -> str:
+    """Inline-only: bold, italic, links. Safe for places where block-level
+    tags (<p>, <ul>) would break the layout (e.g. hero description)."""
+    if not text:
+        return ""
+    s = html.escape(text, quote=True)
+
+    def _link(m):
+        label = m.group(1)
+        url = _safe_url(m.group(2))
+        if not url:
+            return m.group(0)
+        return f'<a href="{html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">{label}</a>'
+    s = _LINK_RE.sub(_link, s)
+    s = _BOLD_RE.sub(r"<strong>\1</strong>", s)
+    s = _ITALIC_RE.sub(r"<em>\1</em>", s)
+    return s
+
+
+def _render_markdown_lite(text: str) -> str:
+    """Block + inline. Input is HTML-escaped first for safety, then markdown
+    patterns are expanded. Produces a block of <p>/<ul> tags."""
+    if not text:
+        return ""
+    text = html.escape(text, quote=True)
+
+    lines = text.split("\n")
+    out: list[str] = []
+    bullet_buffer: list[str] = []
+
+    def flush_bullets():
+        if bullet_buffer:
+            items = "".join(f"<li>{_inline(b)}</li>" for b in bullet_buffer)
+            out.append(f"<ul>{items}</ul>")
+            bullet_buffer.clear()
+
+    def _inline(s: str) -> str:
+        # Links first (so brackets don't confuse bold/italic)
+        def _link(m):
+            label = m.group(1)
+            url = _safe_url(m.group(2))
+            if not url:
+                return m.group(0)  # keep as literal if unsafe scheme
+            return f'<a href="{html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">{label}</a>'
+        s = _LINK_RE.sub(_link, s)
+        s = _BOLD_RE.sub(r"<strong>\1</strong>", s)
+        s = _ITALIC_RE.sub(r"<em>\1</em>", s)
+        return s
+
+    blank_streak = 0
+    para: list[str] = []
+
+    def flush_para():
+        if para:
+            out.append("<p>" + _inline(" ".join(para)) + "</p>")
+            para.clear()
+
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped:
+            flush_bullets()
+            flush_para()
+            blank_streak += 1
+            continue
+        blank_streak = 0
+        if stripped.startswith(("- ", "* ")):
+            flush_para()
+            bullet_buffer.append(stripped[2:])
+        else:
+            flush_bullets()
+            para.append(stripped)
+
+    flush_bullets()
+    flush_para()
+    return "".join(out)
+
+
 def _slugify(name: str) -> str:
     # Normalise accents, lowercase, replace non-alphanum with dashes
     n = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode()
@@ -444,7 +538,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
         extra_block = f'''
         <section class="card">
             <h2>{_esc(labels["more"])}</h2>
-            <div class="prose">{_esc(t["extra_info"]).replace(chr(10), '<br>')}</div>
+            <div class="prose">{_render_markdown_lite(t["extra_info"])}</div>
         </section>'''
 
     map_block = ""
@@ -516,7 +610,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
     <div class="lang-switcher">{lang_links}</div>
     {'<div class="logo-wrap"><img src="' + _esc(business.logo_url) + '" alt="' + _esc(t["name"]) + '" /></div>' if business.logo_url else ''}
     <h1>{_esc(t["name"])}</h1>
-    <p>{_esc(t["description"])}</p>
+    <p>{_render_inline_md(t["description"])}</p>
     <a href="#chat" class="btn-primary" onclick="document.querySelector('.cw-bubble')?.click();return false;">{_esc(labels["chat_cta"])}</a>
   </header>
   <div class="share-toast" id="shareToast">{_esc(labels["share_copied"])}</div>
