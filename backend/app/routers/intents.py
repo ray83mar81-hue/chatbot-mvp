@@ -46,6 +46,26 @@ def _get_intent_and_check_write(
     return intent
 
 
+CSV_TEMPLATE = (
+    "name,keywords,response,priority,button_url,button_label\n"
+    "horarios,\"horario,hora,abierto\",\"Abrimos de Lunes a Viernes de 7h a 20h. Sábados de 8h a 21h.\",10,,\n"
+    "ubicacion,\"donde,ubicacion,direccion,mapa\",\"Estamos en Calle Mayor 42. Parking público a 2 min.\",10,,\n"
+    "reservas,\"reservar,reserva,mesa,grupo\",\"Para grupos de 6+ personas, llama al +34 612 345 678.\",5,https://calendly.com/tunegocio,Reservar\n"
+)
+
+
+# Static routes must come BEFORE /{intent_id} so FastAPI doesn't try to
+# interpret "template.csv" as an intent id.
+@router.get("/template.csv", response_class=PlainTextResponse)
+def download_template(_: AdminUser = Depends(get_current_user)):
+    """Download a sample CSV template with 3 example intents."""
+    return PlainTextResponse(
+        content=CSV_TEMPLATE,
+        headers={"Content-Disposition": 'attachment; filename="intents-template.csv"'},
+        media_type="text/csv; charset=utf-8",
+    )
+
+
 @router.get("/", response_model=list[IntentResponse])
 def list_intents(
     business_id: int = 1,
@@ -288,28 +308,11 @@ async def translate_intent_endpoint(
 
 # ── CSV bulk import ──────────────────────────────────────────────────
 
-CSV_TEMPLATE = (
-    "name,keywords,response,priority,button_url,button_label\n"
-    "horarios,\"horario,hora,abierto\",\"Abrimos de Lunes a Viernes de 7h a 20h. Sábados de 8h a 21h.\",10,,\n"
-    "ubicacion,\"donde,ubicacion,direccion,mapa\",\"Estamos en Calle Mayor 42. Parking público a 2 min.\",10,,\n"
-    "reservas,\"reservar,reserva,mesa,grupo\",\"Para grupos de 6+ personas, llama al +34 612 345 678.\",5,https://calendly.com/tunegocio,Reservar\n"
-)
-
 
 class ImportResult(BaseModel):
     created: int
     skipped: list[dict]    # [{name, reason}]
     errors: list[dict]     # [{row, reason}]
-
-
-@router.get("/template.csv", response_class=PlainTextResponse)
-def download_template(_: AdminUser = Depends(get_current_user)):
-    """Download a sample CSV template with 3 example intents."""
-    return PlainTextResponse(
-        content=CSV_TEMPLATE,
-        headers={"Content-Disposition": 'attachment; filename="intents-template.csv"'},
-        media_type="text/csv; charset=utf-8",
-    )
 
 
 @router.post("/import", response_model=ImportResult)
