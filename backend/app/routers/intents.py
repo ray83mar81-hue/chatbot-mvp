@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import json
@@ -303,6 +304,129 @@ async def translate_intent_endpoint(
         intent_id=intent.id,
         source_language=source_lang,
         translations=results,
+    )
+
+
+# ── Bulk translate-all ───────────────────────────────────────────────
+
+
+class TranslateAllRequest(BaseModel):
+    target_languages: list[str] | None = None
+    source_language: str | None = None
+    overwrite_reviewed: bool = False
+    only_missing: bool = True  # skip intents that already have a translation for each target
+
+
+class TranslateAllResult(BaseModel):
+    total_intents: int
+    total_calls: int
+    translated: int
+    skipped: int
+    errors: list[dict]  # [{intent_id, name, error}]
+
+
+@router.post("/translate-all", response_model=TranslateAllResult)
+async def translate_all_intents(
+    business_id: int,
+    request: TranslateAllRequest = TranslateAllRequest(),
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Translate every intent of a business to the supported languages in one
+    go. Calls run in small concurrent batches to avoid hammering the AI
+    provider while keeping total time manageable for 20-50 intents.
+
+    By default, an intent is considered "already translated" for a language
+    if a needs_review=False translation row exists — those are skipped unless
+    overwrite_reviewed=True.
+    """
+    assert_business_write(current, business_id)
+
+    business = db.query(Business).filter(Business.id == business_id).first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    source_lang = request.source_language or business.default_language or "es"
+
+    if request.target_languages is not None:
+        supported = request.target_languages
+    else:
+        try:
+            supported = json.loads(business.supported_languages or '["es"]')
+        except json.JSONDecodeError:
+            supported = ["es"]
+    targets = [code for code in supported if code != source_lang]
+    if not targets:
+        raise HTTPException(status_code=400, detail="No target languages to translate into")
+
+    intents = (
+        db.query(Intent)
+        .filter(Intent.business_id == business_id)
+        .order_by(Intent.id)
+        .all()
+    )
+    if not intents:
+        return TranslateAllResult(total_intents=0, total_calls=0, translated=0, skipped=0, errors=[])
+
+    # Pre-compute which intents still need translation
+    work: list[tuple[Intent, list[str]]] = []  # (intent, missing_targets)
+    for intent in intents:
+        if request.only_missing and not request.overwrite_reviewed:
+            existing = (
+                db.query(IntentTranslation.language_code)
+                .filter(
+                    IntentTranslation.intent_id == intent.id,
+                    IntentTranslation.language_code.in_(targets),
+                    IntentTranslation.auto_translated.is_(False),
+                    IntentTranslation.needs_review.is_(False),
+                )
+                .all()
+            )
+            approved = {row[0] for row in existing}
+            missing = [t for t in targets if t not in approved]
+        else:
+            missing = list(targets)
+        if missing:
+            work.append((intent, missing))
+
+    if not work:
+        return TranslateAllResult(
+            total_intents=len(intents), total_calls=0,
+            translated=0, skipped=len(intents), errors=[],
+        )
+
+    BATCH_SIZE = 5  # concurrent AI calls — balance speed vs rate limits
+    translated_count = 0
+    errors: list[dict] = []
+
+    async def _one(intent: Intent, missing: list[str]):
+        nonlocal translated_count
+        try:
+            await translate_intent(
+                intent=intent,
+                source_language_code=source_lang,
+                target_language_codes=missing,
+                db=db,
+                overwrite_reviewed=request.overwrite_reviewed,
+            )
+            translated_count += 1
+        except Exception as e:
+            errors.append({
+                "intent_id": intent.id,
+                "name": intent.name,
+                "error": f"{type(e).__name__}: {e}",
+            })
+
+    for i in range(0, len(work), BATCH_SIZE):
+        batch = work[i:i + BATCH_SIZE]
+        await asyncio.gather(*[_one(intent, missing) for intent, missing in batch])
+
+    return TranslateAllResult(
+        total_intents=len(intents),
+        total_calls=len(work),
+        translated=translated_count,
+        skipped=len(intents) - len(work),
+        errors=errors,
     )
 
 

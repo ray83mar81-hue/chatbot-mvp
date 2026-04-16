@@ -321,10 +321,12 @@
         <div class="page-header">
           <h2>Intents</h2>
           <div style="display:flex;gap:8px">
+            <button class="btn" id="translateAllIntentsBtn" style="background:#dbeafe;color:#1e40af" onclick="translateAllIntents()">Traducir todos con IA</button>
             <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="openImportModal()">Importar CSV</button>
             <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
           </div>
         </div>
+        <div id="translateAllMsg" style="display:none;margin-bottom:12px"></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Nombre</th><th>Keywords</th><th>Respuesta</th><th>Prioridad</th><th>Acciones</th></tr></thead>
@@ -1439,6 +1441,57 @@
       captureCurrentTab();
       intentState.currentTab = code;
       renderIntentTabs();
+    }
+
+    /* ── Traducir todos los intents ──────────────────────────────── */
+    async function translateAllIntents() {
+      const msgEl = document.getElementById("translateAllMsg");
+      const btn = document.getElementById("translateAllIntentsBtn");
+      msgEl.style.display = "none";
+
+      const ok = confirm(
+        `Se traducirán con IA todos los intents a los idiomas soportados del negocio.\n\n` +
+        `Solo se traducen los que aún no están aprobados. Consume tokens.\n\n` +
+        `¿Continuar?`
+      );
+      if (!ok) return;
+
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Traduciendo...';
+
+      try {
+        const res = await fetch(`${API}/intents/translate-all?business_id=${businessId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ only_missing: true }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        const result = await res.json();
+
+        const errorsHtml = result.errors.length
+          ? `<div style="color:#991b1b;margin-top:6px"><strong>Errores (${result.errors.length}):</strong><ul style="margin:4px 0 0 18px">${result.errors.map(e => `<li>${esc(e.name)}: ${esc(e.error)}</li>`).join("")}</ul></div>`
+          : "";
+
+        msgEl.className = result.errors.length ? "error-msg" : "success-msg";
+        msgEl.innerHTML = `
+          <div><strong>${result.translated}</strong> intent(s) traducido(s) de ${result.total_calls} llamadas.
+          ${result.skipped ? `${result.skipped} ya estaban aprobados y se saltaron.` : ""}</div>
+          ${errorsHtml}
+        `;
+        msgEl.style.display = "block";
+        await loadIntents();
+      } catch (e) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = "Error al traducir: " + e.message;
+        msgEl.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
     }
 
     /* ── Import CSV ──────────────────────────────────────────────── */
