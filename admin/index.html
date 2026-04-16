@@ -1825,7 +1825,8 @@
           </div>
           <div class="form-group">
             <label>Respuesta</label>
-            <textarea class="ti-response" data-lang="${code}" rows="5" placeholder="Lo que el bot responderá...">${esc(t.response || "")}</textarea>
+            ${mdEditorHtml(code, "ti-response", t.response || "", 5)}
+            <div class="md-hint">Usa los botones para dar formato. El usuario final verá la respuesta ya formateada.</div>
           </div>
           <div class="form-group">
             <label>Texto del botón <span style="color:#9ca3af;font-weight:400">(solo si configuraste URL arriba)</span></label>

@@ -341,6 +341,11 @@
 
     .cw-msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; }
     .cw-msg-bot { background: #fff; color: #1a1a1a; align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .cw-msg-bot strong { font-weight: 700; }
+    .cw-msg-bot em { font-style: italic; }
+    .cw-msg-bot a { color: ${CONFIG.primaryColor}; text-decoration: underline; }
+    .cw-msg-bot ul { margin: 4px 0 4px 20px; padding: 0; }
+    .cw-msg-bot li { margin: 2px 0; }
     .cw-msg-user { background: ${CONFIG.primaryColor}; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
 
     /* Intent CTA button */
@@ -614,10 +619,61 @@
     });
   }
 
+  // ── Markdown-lite renderer for bot messages ──────────────────
+  // Same restricted subset as the landing page: **bold**, *italic*,
+  // [label](url), line-start "- " or "* " bullets. Input is HTML-escaped
+  // before pattern expansion so user/AI content can never inject tags.
+  function _escHtml(s) {
+    return (s || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+  function _inlineMd(s) {
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+    return s;
+  }
+  function mdToHtml(md) {
+    if (!md) return "";
+    const lines = _escHtml(md).split("\n");
+    const out = [];
+    let inList = false;
+    let para = [];
+    const flushPara = () => {
+      if (para.length) { out.push(_inlineMd(para.join("<br>"))); para = []; }
+    };
+    for (const raw of lines) {
+      const t = raw.trim();
+      if (!t) {
+        flushPara();
+        if (inList) { out.push("</ul>"); inList = false; }
+        continue;
+      }
+      if (t.startsWith("- ") || t.startsWith("* ")) {
+        flushPara();
+        if (!inList) { out.push("<ul>"); inList = true; }
+        out.push("<li>" + _inlineMd(t.slice(2)) + "</li>");
+      } else {
+        if (inList) { out.push("</ul>"); inList = false; }
+        para.push(raw);
+      }
+    }
+    flushPara();
+    if (inList) out.push("</ul>");
+    return out.join("");
+  }
+
   function addMessage(text, role) {
     const div = document.createElement("div");
     div.className = `cw-msg cw-msg-${role}`;
-    div.textContent = text;
+    if (role === "bot") {
+      div.dataset.raw = text || "";
+      div.innerHTML = mdToHtml(text || "");
+    } else {
+      div.textContent = text;
+    }
     messagesEl.appendChild(div);
     scrollBottom();
     return div;
@@ -875,7 +931,11 @@
               hideTyping();
               botBubble = addBotBubble();
             } else if (event.type === "chunk" && botBubble) {
-              botBubble.textContent += event.content;
+              // Accumulate the raw markdown in a data attribute and re-render
+              // the whole bubble each chunk so partial markdown (e.g. "**"
+              // without its closing "**") never ends up in the DOM.
+              botBubble.dataset.raw = (botBubble.dataset.raw || "") + event.content;
+              botBubble.innerHTML = mdToHtml(botBubble.dataset.raw);
               scrollBottom();
             } else if (event.type === "button") {
               pendingButton = {
