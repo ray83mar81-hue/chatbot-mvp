@@ -35,6 +35,34 @@
     .error-msg { color: #ef4444; font-size: 13px; margin-top: 8px; }
     .success-msg { color: #10b981; font-size: 13px; margin-top: 8px; }
 
+    /* ── Chip-style keyword input ──────────────────────────── */
+    .kw-chips-wrap {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px;
+      background: #fff; cursor: text; min-height: 44px;
+    }
+    .kw-chips-wrap:focus-within { border-color: #2563eb; }
+    .kw-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #dbeafe; color: #1e40af; padding: 3px 4px 3px 10px;
+      border-radius: 999px; font-size: 13px; font-weight: 500; line-height: 1.2;
+      user-select: none;
+    }
+    .kw-chip.kw-chip-conflict {
+      background: #fee2e2; color: #991b1b;
+      box-shadow: 0 0 0 1px #fca5a5 inset;
+    }
+    .kw-chip button {
+      background: transparent; border: none; color: inherit; cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 0 2px;
+      opacity: .6; transition: opacity .1s;
+    }
+    .kw-chip button:hover { opacity: 1; }
+    .kw-chips-wrap input {
+      flex: 1; min-width: 120px; border: none; outline: none;
+      font-size: 14px; padding: 4px 0; background: transparent;
+    }
+
     /* ── Markdown toolbar + editor ──────────────────────────── */
     .md-toolbar { display: flex; gap: 2px; background: #f9fafb; border: 1px solid #d1d5db; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; padding: 4px; }
     .md-toolbar button { background: transparent; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; color: #4b5563; font-weight: 600; }
@@ -1795,15 +1823,42 @@
       defaultLang: "es",
     };
 
+    // Keeps the set of normalized keywords that are in conflict, keyed by
+    // intent_id. Populated by loadIntentConflicts and consumed by
+    // renderIntents to paint chips red. Source of truth across the UI so
+    // the main table and the edit modal stay in sync.
+    let _conflictKwByIntent = {};
+
+    function _normKw(s) {
+      return (s || "").toLowerCase().trim()
+        .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[¿?¡!.,;:"'()[\]{}]/g, "");
+    }
+
     async function loadIntents() {
       try {
-        const res = await fetch(`${API}/intents/?business_id=${businessId}`);
-        const intents = await res.json();
+        const [intentsRes, conflictsRes] = await Promise.all([
+          fetch(`${API}/intents/?business_id=${businessId}`),
+          fetch(`${API}/intents/conflicts?business_id=${businessId}`),
+        ]);
+        const intents = await intentsRes.json();
+        const conflicts = conflictsRes.ok ? await conflictsRes.json() : [];
+
+        // Build the conflicting-keyword index: for each intent, the set of
+        // normalized keywords that appear in any conflict. Render uses it
+        // to paint chips red.
+        _conflictKwByIntent = {};
+        conflicts.forEach(c => {
+          const a = _normKw(c.keyword_a);
+          const b = _normKw(c.keyword_b);
+          (_conflictKwByIntent[c.intent_a_id] = _conflictKwByIntent[c.intent_a_id] || new Set()).add(a);
+          (_conflictKwByIntent[c.intent_b_id] = _conflictKwByIntent[c.intent_b_id] || new Set()).add(b);
+        });
+
+        // Render the banner with these already-fetched conflicts
+        renderIntentConflictsBanner(conflicts);
+
         const tbody = document.getElementById("intentsBody");
-
-        // Fire conflict detection in parallel (don't block the table)
-        loadIntentConflicts();
-
         if (intents.length === 0) {
           tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">No hay intents</td></tr>`;
           return;
@@ -1812,12 +1867,21 @@
         tbody.innerHTML = intents.map((i) => {
           let kw = [];
           try { kw = JSON.parse(i.keywords); } catch(e) {}
+          const conflictSet = _conflictKwByIntent[i.id];
+          const kwHtml = kw.map(k => {
+            const isConflict = conflictSet && conflictSet.has(_normKw(k));
+            const style = isConflict
+              ? 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5'
+              : '';
+            const title = isConflict ? ' title="Esta keyword está en conflicto con otro intent"' : '';
+            return `<span class="badge badge-intent" style="${style}"${title}>${esc(k)}</span>`;
+          }).join(" ");
           const btn = i.button_url
             ? `<span class="badge badge-active" title="${esc(i.button_url)}">CTA</span> `
             : "";
           return `<tr>
             <td><strong>${esc(i.name)}</strong></td>
-            <td>${kw.map(k => `<span class="badge badge-intent">${esc(k)}</span>`).join(" ")}</td>
+            <td>${kwHtml}</td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${btn}${esc(i.response)}</td>
             <td>${i.priority}</td>
             <td>
@@ -1856,6 +1920,61 @@
       return { keywords: "[]", response: "", button_label: "", auto_translated: false, needs_review: false };
     }
 
+    /* ── Chip-style keyword editor ─────────────────────────────── */
+    function kwChipsHtml(code, kwArr, conflictSet) {
+      const chips = (kwArr || []).map(k => {
+        const isConflict = conflictSet && conflictSet.has(_normKw(k));
+        return `<span class="kw-chip${isConflict ? " kw-chip-conflict" : ""}"><span class="kw-chip-text">${esc(k)}</span><button type="button" onclick="removeKwChip(this)" aria-label="Quitar">×</button></span>`;
+      }).join("");
+      return `<div class="kw-chips-wrap ti-keywords" data-lang="${code}" onclick="(this.querySelector('input')||{}).focus && this.querySelector('input').focus()">
+        ${chips}<input type="text" placeholder="Añade keyword y pulsa coma o Enter" onkeydown="kwChipInputKey(event)" />
+      </div>`;
+    }
+
+    function _kwWrapFromInput(inputEl) {
+      return inputEl.closest(".kw-chips-wrap");
+    }
+
+    function kwChipInputKey(e) {
+      const inp = e.target;
+      const wrap = _kwWrapFromInput(inp);
+      if (!wrap) return;
+      // Add chip on comma or Enter
+      if (e.key === "," || e.key === "Enter") {
+        e.preventDefault();
+        const value = inp.value.trim().replace(/,$/, "").trim();
+        if (value) _addKwChip(wrap, value);
+        inp.value = "";
+        return;
+      }
+      // Backspace on empty input removes the last chip
+      if (e.key === "Backspace" && inp.value === "") {
+        const chips = wrap.querySelectorAll(".kw-chip");
+        const last = chips[chips.length - 1];
+        if (last) last.remove();
+      }
+    }
+
+    function _addKwChip(wrap, text) {
+      // Avoid duplicates within the same input
+      const existing = Array.from(wrap.querySelectorAll(".kw-chip-text")).map(n => n.textContent.toLowerCase());
+      if (existing.includes(text.toLowerCase())) return;
+      const chip = document.createElement("span");
+      chip.className = "kw-chip";
+      chip.innerHTML = `<span class="kw-chip-text">${esc(text)}</span><button type="button" onclick="removeKwChip(this)" aria-label="Quitar">×</button>`;
+      const inp = wrap.querySelector("input");
+      wrap.insertBefore(chip, inp);
+    }
+
+    function removeKwChip(btn) {
+      const chip = btn.closest(".kw-chip");
+      if (chip) chip.remove();
+    }
+
+    function _readKwChips(wrap) {
+      return Array.from(wrap.querySelectorAll(".kw-chip-text")).map(n => n.textContent.trim()).filter(Boolean);
+    }
+
     function renderIntentTabs() {
       const tabsEl = document.getElementById("intentLangTabs");
       const panesEl = document.getElementById("intentLangPanes");
@@ -1890,14 +2009,20 @@
              </div>`
           : "";
 
+        // Conflict set for this intent: keywords currently colliding with
+        // another intent (populated by loadIntents). Scoped here so the
+        // chip editor can paint the bad ones red.
+        const conflictKwSet = (intentState.editingId && _conflictKwByIntent[intentState.editingId]) || new Set();
+
         const pane = document.createElement("div");
         pane.className = "lang-pane" + (isActive ? " active" : "");
         pane.dataset.lang = code;
         pane.innerHTML = `
           ${banner}
           <div class="form-group">
-            <label>Keywords (separadas por coma) ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
-            <input class="ti-keywords" data-lang="${code}" value="${esc(kwArr.join(', '))}" placeholder="ej: horario, abierto, hora" />
+            <label>Keywords ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
+            ${kwChipsHtml(code, kwArr, conflictKwSet)}
+            <p class="md-hint">Escribe una keyword y pulsa coma o Enter. Las que aparezcan en <span style="color:#991b1b">rojo</span> están en conflicto con otro intent.</p>
           </div>
           <div class="form-group">
             <label>Respuesta</label>
@@ -1920,11 +2045,20 @@
       const pane = document.querySelector("#intentLangPanes .lang-pane.active");
       if (!pane) return;
       const code = pane.dataset.lang;
-      const kwInput = pane.querySelector(".ti-keywords");
+      const kwWrap = pane.querySelector(".ti-keywords");
       const respInput = pane.querySelector(".ti-response");
       const btnInput = pane.querySelector(".ti-button-label");
-      if (!kwInput || !respInput || !btnInput) return;
-      const kw = kwInput.value.split(",").map(k => k.trim()).filter(Boolean);
+      if (!kwWrap || !respInput || !btnInput) return;
+
+      // Read keywords from the chip editor. Also sweep in any text the user
+      // typed but didn't commit to a chip yet — behave like they pressed Enter.
+      const pending = kwWrap.querySelector("input");
+      if (pending && pending.value.trim()) {
+        _addKwChip(kwWrap, pending.value.trim());
+        pending.value = "";
+      }
+      const kw = _readKwChips(kwWrap);
+
       const t = intentState.translations[code] || emptyTranslation();
       t.keywords = JSON.stringify(kw);
       t.response = respInput.value;
@@ -2432,13 +2566,22 @@ Haz una última pasada mental:
 
     /* ── Intent keyword conflicts ────────────────────────────── */
     async function loadIntentConflicts() {
-      const block = document.getElementById("intentConflictsBlock");
-      if (!block) return;
+      // Kept for back-compat (other code paths might call it). Fetches
+      // fresh and delegates to renderIntentConflictsBanner.
       try {
         const res = await fetch(`${API}/intents/conflicts?business_id=${businessId}`);
-        if (!res.ok) { block.style.display = "none"; return; }
-        const conflicts = await res.json();
-        if (!conflicts.length) { block.style.display = "none"; return; }
+        const conflicts = res.ok ? await res.json() : [];
+        renderIntentConflictsBanner(conflicts);
+      } catch (e) {
+        const block = document.getElementById("intentConflictsBlock");
+        if (block) block.style.display = "none";
+      }
+    }
+
+    function renderIntentConflictsBanner(conflicts) {
+      const block = document.getElementById("intentConflictsBlock");
+      if (!block) return;
+      if (!conflicts || !conflicts.length) { block.style.display = "none"; return; }
 
         // Group conflicts by language so the admin sees each language's mess separately
         const byLang = {};
@@ -2513,10 +2656,7 @@ Haz una última pasada mental:
             ${sections}
           </details>
         `;
-        block.style.display = "block";
-      } catch (e) {
-        block.style.display = "none";
-      }
+      block.style.display = "block";
     }
 
     async function editIntentById(id) {
@@ -2532,6 +2672,7 @@ Haz una última pasada mental:
       await ensureBusinessLangsLoaded();
       intentState.translations = {};
       intentState.currentTab = intentState.defaultLang;
+      intentState.editingId = data ? data.id : null;
 
       document.getElementById("intentModalTitle").textContent = data ? "Editar intent" : "Nuevo intent";
       document.getElementById("intentId").value = data ? data.id : "";
