@@ -320,7 +320,10 @@
       <div class="section" id="sec-intents">
         <div class="page-header">
           <h2>Intents</h2>
-          <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="openImportModal()">Importar CSV</button>
+            <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -657,6 +660,37 @@
         <button class="btn btn-danger btn-sm" onclick="deleteContact()" style="margin-right:auto">Borrar (RGPD)</button>
         <button class="btn btn-secondary" onclick="closeContactModal()">Cerrar</button>
         <button class="btn btn-primary" onclick="saveContactStatus()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Import intents CSV ═══════ -->
+  <div class="modal-overlay" id="importIntentsModal">
+    <div class="modal" style="width:560px">
+      <h3>Importar intents desde CSV</h3>
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 16px">
+        Sube un archivo CSV con los intents del negocio. Se crearán en el idioma por defecto
+        y se pueden traducir después desde la pestaña Intents.
+      </p>
+
+      <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#4b5563">
+        <strong>Columnas esperadas:</strong>
+        <code style="background:#fff;padding:2px 6px;border-radius:4px">name, keywords, response, priority, button_url, button_label</code>
+        <div style="margin-top:8px">
+          <a href="#" onclick="event.preventDefault();downloadImportTemplate()" style="color:#2563eb">Descargar plantilla de ejemplo</a>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Archivo CSV</label>
+        <input type="file" id="importFile" accept=".csv,text/csv" />
+      </div>
+
+      <div id="importSummary" style="display:none;margin-top:12px;padding:12px;border-radius:8px"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeImportModal()">Cerrar</button>
+        <button class="btn btn-primary" id="importSubmitBtn" onclick="submitImport()">Importar</button>
       </div>
     </div>
   </div>
@@ -1405,6 +1439,91 @@
       captureCurrentTab();
       intentState.currentTab = code;
       renderIntentTabs();
+    }
+
+    /* ── Import CSV ──────────────────────────────────────────────── */
+    function openImportModal() {
+      document.getElementById("importFile").value = "";
+      document.getElementById("importSummary").style.display = "none";
+      document.getElementById("importSubmitBtn").disabled = false;
+      document.getElementById("importSubmitBtn").textContent = "Importar";
+      document.getElementById("importIntentsModal").classList.add("open");
+    }
+
+    function closeImportModal() {
+      document.getElementById("importIntentsModal").classList.remove("open");
+    }
+
+    async function downloadImportTemplate() {
+      try {
+        const res = await fetch(`${API}/intents/template.csv`);
+        if (!res.ok) throw new Error("Error");
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "intents-template.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert("No se pudo descargar la plantilla: " + e.message);
+      }
+    }
+
+    async function submitImport() {
+      const fileInput = document.getElementById("importFile");
+      const summaryEl = document.getElementById("importSummary");
+      const btn = document.getElementById("importSubmitBtn");
+      summaryEl.style.display = "none";
+
+      if (!fileInput.files || !fileInput.files[0]) {
+        summaryEl.className = "error-msg";
+        summaryEl.textContent = "Selecciona un archivo CSV primero.";
+        summaryEl.style.display = "block";
+        return;
+      }
+
+      const form = new FormData();
+      form.append("file", fileInput.files[0]);
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Importando...';
+
+      try {
+        const res = await fetch(`${API}/intents/import?business_id=${businessId}`, {
+          method: "POST",
+          body: form,  // no Content-Type — browser sets multipart boundary
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error al importar");
+        }
+        const result = await res.json();
+
+        // Build summary
+        const skippedHtml = result.skipped.length
+          ? `<div><strong>Saltados (ya existían):</strong> ${result.skipped.map(s => esc(s.name)).join(", ")}</div>`
+          : "";
+        const errorsHtml = result.errors.length
+          ? `<div style="color:#991b1b;margin-top:6px"><strong>Errores:</strong><ul style="margin:4px 0 0 18px">${result.errors.map(e => `<li>Fila ${e.row}: ${esc(e.reason)}</li>`).join("")}</ul></div>`
+          : "";
+
+        summaryEl.className = result.errors.length ? "error-msg" : "success-msg";
+        summaryEl.innerHTML = `
+          <div><strong>${result.created}</strong> intent(s) creado(s) correctamente.</div>
+          ${skippedHtml}
+          ${errorsHtml}
+        `;
+        summaryEl.style.display = "block";
+        await loadIntents();
+      } catch (e) {
+        summaryEl.className = "error-msg";
+        summaryEl.textContent = e.message;
+        summaryEl.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Importar";
+      }
     }
 
     async function openIntentModal(data) {

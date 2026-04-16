@@ -1,6 +1,10 @@
+import csv
+import io
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -280,3 +284,136 @@ async def translate_intent_endpoint(
         source_language=source_lang,
         translations=results,
     )
+
+
+# ── CSV bulk import ──────────────────────────────────────────────────
+
+CSV_TEMPLATE = (
+    "name,keywords,response,priority,button_url,button_label\n"
+    "horarios,\"horario,hora,abierto\",\"Abrimos de Lunes a Viernes de 7h a 20h. Sábados de 8h a 21h.\",10,,\n"
+    "ubicacion,\"donde,ubicacion,direccion,mapa\",\"Estamos en Calle Mayor 42. Parking público a 2 min.\",10,,\n"
+    "reservas,\"reservar,reserva,mesa,grupo\",\"Para grupos de 6+ personas, llama al +34 612 345 678.\",5,https://calendly.com/tunegocio,Reservar\n"
+)
+
+
+class ImportResult(BaseModel):
+    created: int
+    skipped: list[dict]    # [{name, reason}]
+    errors: list[dict]     # [{row, reason}]
+
+
+@router.get("/template.csv", response_class=PlainTextResponse)
+def download_template(_: AdminUser = Depends(get_current_user)):
+    """Download a sample CSV template with 3 example intents."""
+    return PlainTextResponse(
+        content=CSV_TEMPLATE,
+        headers={"Content-Disposition": 'attachment; filename="intents-template.csv"'},
+        media_type="text/csv; charset=utf-8",
+    )
+
+
+@router.post("/import", response_model=ImportResult)
+async def import_intents_csv(
+    business_id: int,
+    file: UploadFile = File(...),
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Bulk-create intents from a CSV file.
+
+    Expected columns (header required): name, keywords, response, priority,
+    button_url, button_label. Keywords comma-separated inside the cell.
+    Intents are created in the business's default language.
+    Duplicates (by intent name within this business) are skipped, not
+    overwritten, to avoid accidental data loss.
+    """
+    assert_business_write(current, business_id)
+
+    business = db.query(Business).filter(Business.id == business_id).first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    default_lang = business.default_language or "es"
+
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")  # strips BOM Excel loves to add
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-1")
+        except Exception:
+            raise HTTPException(status_code=400, detail="File must be UTF-8 or Latin-1 encoded")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV is empty")
+
+    required = {"name", "response"}
+    missing = required - set(h.strip().lower() for h in reader.fieldnames)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Missing required columns: {', '.join(missing)}. Required: name, response.",
+        )
+
+    # Existing names in this business — de-dup source
+    existing_names = {
+        n for (n,) in db.query(Intent.name).filter(Intent.business_id == business_id).all()
+    }
+
+    created = 0
+    skipped: list[dict] = []
+    errors: list[dict] = []
+
+    for idx, row in enumerate(reader, start=2):  # header is row 1
+        # Normalise keys
+        row = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
+        name = row.get("name", "")
+        response_text = row.get("response", "")
+        if not name:
+            errors.append({"row": idx, "reason": "name is empty"})
+            continue
+        if not response_text:
+            errors.append({"row": idx, "reason": f"response is empty for '{name}'"})
+            continue
+        if name in existing_names:
+            skipped.append({"name": name, "reason": "already exists"})
+            continue
+
+        try:
+            priority = int(row.get("priority") or 10)
+        except ValueError:
+            priority = 10
+
+        # Parse keywords: "horario, hora, abierto" → list
+        kw_raw = row.get("keywords", "")
+        kw_list = [k.strip() for k in kw_raw.split(",") if k.strip()]
+        kw_json = json.dumps(kw_list, ensure_ascii=False)
+
+        intent = Intent(
+            business_id=business_id,
+            name=name,
+            keywords=kw_json,
+            response=response_text,
+            priority=priority,
+            button_url=row.get("button_url", ""),
+            button_open_new_tab=True,
+        )
+        db.add(intent)
+        db.flush()  # get intent.id
+
+        translation = IntentTranslation(
+            intent_id=intent.id,
+            language_code=default_lang,
+            keywords=kw_json,
+            response=response_text,
+            button_label=row.get("button_label", ""),
+            auto_translated=False,
+            needs_review=False,
+        )
+        db.add(translation)
+        existing_names.add(name)
+        created += 1
+
+    db.commit()
+    return ImportResult(created=created, skipped=skipped, errors=errors)
