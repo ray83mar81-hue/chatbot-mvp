@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.deps import assert_business_access, get_current_user
+from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation
 from app.models.contact_request import ContactRequest
@@ -214,9 +216,11 @@ def list_contact_requests(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List contact requests for a business, optionally filtered by status."""
+    assert_business_access(current, business_id)
     query = db.query(ContactRequest).filter(
         ContactRequest.business_id == business_id,
     )
@@ -234,12 +238,17 @@ def list_contact_requests(
     "/contact/requests/{contact_id}",
     response_model=ContactRequestResponse,
 )
-def get_contact_request(contact_id: int, db: Session = Depends(get_db)):
+def get_contact_request(
+    contact_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     contact = (
         db.query(ContactRequest).filter(ContactRequest.id == contact_id).first()
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact request not found")
+    assert_business_access(current, contact.business_id)
     return contact
 
 
@@ -250,6 +259,7 @@ def get_contact_request(contact_id: int, db: Session = Depends(get_db)):
 def update_contact_request(
     contact_id: int,
     data: ContactRequestUpdate,
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Update status (new → contacted → closed) or add admin notes."""
@@ -258,6 +268,7 @@ def update_contact_request(
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact request not found")
+    assert_business_access(current, contact.business_id)
 
     if data.status is not None:
         valid = {"new", "contacted", "closed"}
@@ -276,13 +287,18 @@ def update_contact_request(
 
 
 @router.delete("/contact/requests/{contact_id}")
-def delete_contact_request(contact_id: int, db: Session = Depends(get_db)):
+def delete_contact_request(
+    contact_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """GDPR: delete a contact request (right to erasure)."""
     contact = (
         db.query(ContactRequest).filter(ContactRequest.id == contact_id).first()
     )
     if not contact:
         raise HTTPException(status_code=404, detail="Contact request not found")
+    assert_business_access(current, contact.business_id)
     db.delete(contact)
     db.commit()
     return {"detail": "Contact request deleted"}

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Salt for hashing client IPs (GDPR compliance)
     IP_HASH_SALT: str = "change-me-in-production"
 
+    # On startup, if an AdminUser with this email exists, promote it to
+    # role=superadmin. Useful for one-shot deployments where the existing
+    # admin user should become the platform operator.
+    SUPERADMIN_EMAIL: str = ""
+
     model_config = {"env_file": ".env"}
 
 

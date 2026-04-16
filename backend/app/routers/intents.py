@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.deps import assert_business_access, get_current_user
+from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.intent import Intent
 from app.models.intent_translation import IntentTranslation
@@ -20,8 +22,23 @@ from app.services.translation_service import TranslationError, translate_intent
 router = APIRouter(prefix="/intents", tags=["intents"])
 
 
+def _get_intent_and_check_access(
+    intent_id: int, current: AdminUser, db: Session
+) -> Intent:
+    intent = db.query(Intent).filter(Intent.id == intent_id).first()
+    if not intent:
+        raise HTTPException(status_code=404, detail="Intent not found")
+    assert_business_access(current, intent.business_id)
+    return intent
+
+
 @router.get("/", response_model=list[IntentResponse])
-def list_intents(business_id: int = 1, db: Session = Depends(get_db)):
+def list_intents(
+    business_id: int = 1,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    assert_business_access(current, business_id)
     return (
         db.query(Intent)
         .filter(Intent.business_id == business_id)
@@ -31,15 +48,21 @@ def list_intents(business_id: int = 1, db: Session = Depends(get_db)):
 
 
 @router.get("/{intent_id}", response_model=IntentResponse)
-def get_intent(intent_id: int, db: Session = Depends(get_db)):
-    intent = db.query(Intent).filter(Intent.id == intent_id).first()
-    if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
-    return intent
+def get_intent(
+    intent_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _get_intent_and_check_access(intent_id, current, db)
 
 
 @router.post("/", response_model=IntentResponse)
-def create_intent(data: IntentCreate, db: Session = Depends(get_db)):
+def create_intent(
+    data: IntentCreate,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    assert_business_access(current, data.business_id)
     intent = Intent(**data.model_dump())
     db.add(intent)
     db.commit()
@@ -67,11 +90,12 @@ def create_intent(data: IntentCreate, db: Session = Depends(get_db)):
 
 @router.put("/{intent_id}", response_model=IntentResponse)
 def update_intent(
-    intent_id: int, data: IntentUpdate, db: Session = Depends(get_db)
+    intent_id: int,
+    data: IntentUpdate,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    intent = db.query(Intent).filter(Intent.id == intent_id).first()
-    if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
+    intent = _get_intent_and_check_access(intent_id, current, db)
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -83,10 +107,12 @@ def update_intent(
 
 
 @router.delete("/{intent_id}")
-def delete_intent(intent_id: int, db: Session = Depends(get_db)):
-    intent = db.query(Intent).filter(Intent.id == intent_id).first()
-    if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
+def delete_intent(
+    intent_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    intent = _get_intent_and_check_access(intent_id, current, db)
     db.delete(intent)
     db.commit()
     return {"detail": "Intent deleted"}
@@ -99,11 +125,13 @@ def delete_intent(intent_id: int, db: Session = Depends(get_db)):
     "/{intent_id}/translations",
     response_model=list[IntentTranslationResponse],
 )
-def list_intent_translations(intent_id: int, db: Session = Depends(get_db)):
+def list_intent_translations(
+    intent_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """List all translations of an intent (one row per language)."""
-    intent = db.query(Intent).filter(Intent.id == intent_id).first()
-    if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
+    intent = _get_intent_and_check_access(intent_id, current, db)
     return (
         db.query(IntentTranslation)
         .filter(IntentTranslation.intent_id == intent_id)
@@ -120,6 +148,7 @@ def upsert_intent_translation(
     intent_id: int,
     language_code: str,
     data: IntentTranslationUpdate,
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -127,9 +156,7 @@ def upsert_intent_translation(
     Setting needs_review=False marks it as human-reviewed (won't be overwritten
     by future auto-translations unless overwrite_reviewed=True).
     """
-    intent = db.query(Intent).filter(Intent.id == intent_id).first()
-    if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
+    intent = _get_intent_and_check_access(intent_id, current, db)
 
     # Verify the language exists and is active
     lang = (
@@ -194,6 +221,7 @@ def upsert_intent_translation(
 async def translate_intent_endpoint(
     intent_id: int,
     request: TranslateIntentRequest = TranslateIntentRequest(),
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -203,9 +231,7 @@ async def translate_intent_endpoint(
     Each call costs tokens — use sparingly. Generated translations are
     stored with needs_review=True so the admin can review them in the UI.
     """
-    intent = db.query(Intent).filter(Intent.id == intent_id).first()
-    if not intent:
-        raise HTTPException(status_code=404, detail="Intent not found")
+    intent = _get_intent_and_check_access(intent_id, current, db)
 
     business = db.query(Business).filter(Business.id == intent.business_id).first()
     if not business:

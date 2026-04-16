@@ -33,6 +33,9 @@ class Business(Base):
     whatsapp_phone = Column(String(50), default="")  # E.164 without "+", e.g. "34612345678"
     whatsapp_enabled = Column(Boolean, default=False)
 
+    # Platform-level: superadmin can deactivate a tenant without deleting their data
+    is_active = Column(Boolean, default=True, nullable=False)
+
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

@@ -5,6 +5,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.deps import assert_business_access, get_current_user
+from app.models.admin_user import AdminUser
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.schemas.metrics import DailyCount, MetricsResponse, TopIntent
@@ -16,8 +18,10 @@ router = APIRouter(prefix="/metrics", tags=["metrics"])
 def get_metrics(
     business_id: int = 1,
     days: int = 30,
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    assert_business_access(current, business_id)
     since = datetime.utcnow() - timedelta(days=days)
 
     # Total conversations

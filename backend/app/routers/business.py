@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.deps import assert_business_access, get_current_user, require_superadmin
+from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation
 from app.models.language import Language
@@ -20,7 +22,12 @@ router = APIRouter(prefix="/business", tags=["business"])
 
 
 @router.get("/{business_id}", response_model=BusinessResponse)
-def get_business(business_id: int, db: Session = Depends(get_db)):
+def get_business(
+    business_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    assert_business_access(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -28,7 +35,12 @@ def get_business(business_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=BusinessResponse)
-def create_business(data: BusinessCreate, db: Session = Depends(get_db)):
+def create_business(
+    data: BusinessCreate,
+    _: AdminUser = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    """Only superadmin can create new tenants."""
     business = Business(**data.model_dump())
     db.add(business)
     db.commit()
@@ -38,8 +50,12 @@ def create_business(data: BusinessCreate, db: Session = Depends(get_db)):
 
 @router.put("/{business_id}", response_model=BusinessResponse)
 def update_business(
-    business_id: int, data: BusinessUpdate, db: Session = Depends(get_db)
+    business_id: int,
+    data: BusinessUpdate,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    assert_business_access(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -60,7 +76,12 @@ def update_business(
     "/{business_id}/translations",
     response_model=list[BusinessTranslationResponse],
 )
-def list_business_translations(business_id: int, db: Session = Depends(get_db)):
+def list_business_translations(
+    business_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    assert_business_access(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -80,8 +101,10 @@ def upsert_business_translation(
     business_id: int,
     language_code: str,
     data: BusinessTranslationUpdate,
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    assert_business_access(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -134,8 +157,10 @@ def upsert_business_translation(
 async def translate_business_endpoint(
     business_id: int,
     request: TranslateBusinessRequest = TranslateBusinessRequest(),
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    assert_business_access(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")

@@ -230,6 +230,7 @@
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-brand">Chatbot MVP</div>
+      <div style="padding:0 16px 16px"><span id="roleBadge" style="display:none;font-size:11px;font-weight:600;padding:4px 8px;border-radius:4px"></span></div>
       <nav class="sidebar-nav">
         <div class="nav-item active" data-section="dashboard">
           <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
@@ -626,6 +627,7 @@
     const API = window.location.origin;
     let token = localStorage.getItem("admin_token") || "";
     let businessId = parseInt(localStorage.getItem("admin_business_id") || "1", 10);
+    let currentUser = null;  // {id, email, role, business_id}
 
     /* ════════════════════════════════════════════════
        AUTH
@@ -633,6 +635,29 @@
     function headers() {
       return { "Content-Type": "application/json", Authorization: "Bearer " + token };
     }
+
+    // Global fetch wrapper: auto-inject Authorization header for same-origin
+    // API calls and redirect to login on 401. This keeps call sites simple.
+    const _origFetch = window.fetch;
+    window.fetch = async function(url, opts = {}) {
+      const urlStr = typeof url === "string" ? url : (url && url.url) || "";
+      const isApi = urlStr.startsWith(API) && !urlStr.startsWith(`${API}/widget/`)
+                    && !urlStr.startsWith(`${API}/flags/`) && !urlStr.startsWith(`${API}/admin/`);
+      if (isApi && token) {
+        const h = new Headers(opts.headers || {});
+        if (!h.has("Authorization")) h.set("Authorization", "Bearer " + token);
+        opts.headers = h;
+      }
+      const res = await _origFetch(url, opts);
+      if (res.status === 401 && isApi && !urlStr.includes("/auth/login") && !urlStr.includes("/auth/register")) {
+        token = "";
+        currentUser = null;
+        localStorage.removeItem("admin_token");
+        document.getElementById("app").style.display = "none";
+        document.getElementById("loginPage").style.display = "flex";
+      }
+      return res;
+    };
 
     async function handleLogin() {
       const email = document.getElementById("loginEmail").value.trim();
@@ -650,14 +675,12 @@
         const data = await res.json();
         token = data.access_token;
         localStorage.setItem("admin_token", token);
-        // Decode business_id from JWT payload
-        try {
-          const payload = JSON.parse(atob(token.split(".")[1]));
-          if (payload.business_id) {
-            businessId = payload.business_id;
-            localStorage.setItem("admin_business_id", businessId);
-          }
-        } catch(e) {}
+        currentUser = { role: data.role, business_id: data.business_id };
+        if (data.business_id) {
+          businessId = data.business_id;
+          localStorage.setItem("admin_business_id", businessId);
+        }
+        await loadCurrentUser();
         showApp();
       } catch (e) {
         errEl.textContent = e.message;
@@ -691,6 +714,8 @@
         const data = await res.json();
         token = data.access_token;
         localStorage.setItem("admin_token", token);
+        currentUser = { role: data.role, business_id: data.business_id };
+        await loadCurrentUser();
         showApp();
       } catch (e) {
         errEl.textContent = e.message;
@@ -700,9 +725,38 @@
 
     function handleLogout() {
       token = "";
+      currentUser = null;
       localStorage.removeItem("admin_token");
       document.getElementById("app").style.display = "none";
       document.getElementById("loginPage").style.display = "flex";
+    }
+
+    async function loadCurrentUser() {
+      try {
+        const res = await fetch(`${API}/auth/me`);
+        if (!res.ok) return;
+        currentUser = await res.json();
+        if (currentUser.business_id) {
+          businessId = currentUser.business_id;
+          localStorage.setItem("admin_business_id", businessId);
+        }
+        applyRoleToUI();
+      } catch (e) { /* ignore */ }
+    }
+
+    function applyRoleToUI() {
+      const badge = document.getElementById("roleBadge");
+      if (!badge || !currentUser) return;
+      if (currentUser.role === "superadmin") {
+        badge.textContent = "Superadmin";
+        badge.style.background = "#fee2e2";
+        badge.style.color = "#991b1b";
+      } else {
+        badge.textContent = "Cliente";
+        badge.style.background = "#dbeafe";
+        badge.style.color = "#1e40af";
+      }
+      badge.style.display = "inline-block";
     }
 
     /* ════════════════════════════════════════════════
@@ -2727,9 +2781,11 @@
       loadDashboard();
     }
 
-    // Auto-login if token exists
+    // Auto-login if token exists — verify by loading /me first
     if (token) {
-      showApp();
+      loadCurrentUser().then(() => {
+        if (currentUser) showApp();
+      });
     }
 
     // Close modals on overlay click

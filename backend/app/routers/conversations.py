@@ -5,6 +5,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.deps import assert_business_access, get_current_user
+from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.conversation import Conversation
 from app.models.language import Language
@@ -27,8 +29,10 @@ def list_conversations(
     business_id: int = 1,
     limit: int = 50,
     offset: int = 0,
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    assert_business_access(current, business_id)
     conversations = (
         db.query(Conversation)
         .filter(Conversation.business_id == business_id)
@@ -66,12 +70,17 @@ def list_conversations(
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
-def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
+def get_conversation(
+    conversation_id: int,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     conversation = (
         db.query(Conversation).filter(Conversation.id == conversation_id).first()
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    assert_business_access(current, conversation.business_id)
     return conversation
 
 
@@ -82,6 +91,7 @@ def get_conversation(conversation_id: int, db: Session = Depends(get_db)):
 async def translate_conversation(
     conversation_id: int,
     data: TranslateConversationRequest = TranslateConversationRequest(),
+    current: AdminUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Translate every message of a conversation to a target language via AI.
@@ -93,6 +103,7 @@ async def translate_conversation(
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    assert_business_access(current, conversation.business_id)
 
     business = db.query(Business).filter(Business.id == conversation.business_id).first()
     target_code = (data.target_language or (business.default_language if business else "es")).strip()

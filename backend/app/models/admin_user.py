@@ -9,9 +9,12 @@ class AdminUser(Base):
     __tablename__ = "admin_users"
 
     id = Column(Integer, primary_key=True, index=True)
-    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=False)
+    # Nullable for superadmins (they are not tied to a single business)
+    business_id = Column(Integer, ForeignKey("businesses.id"), nullable=True)
     email = Column(String(255), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
+    # "client_admin" (owner of a single business) or "superadmin" (platform operator)
+    role = Column(String(20), nullable=False, default="client_admin")
     created_at = Column(DateTime, server_default=func.now())
 
     business = relationship("Business", back_populates="admin_users")

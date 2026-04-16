@@ -51,6 +51,7 @@ def on_startup():
     _seed_demo_data()
     _backfill_intent_translations()
     _backfill_business_translations()
+    _promote_superadmin_by_email()
 
 
 # Lightweight schema migrations. Each entry is a tuple of
@@ -78,11 +79,15 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "widget_design", "TEXT DEFAULT '{}'"),
     # Language of the conversation (for admin to see + translate to default)
     ("conversations", "language_code", "VARCHAR(5) DEFAULT 'es'"),
+    # Role-based access control
+    ("admin_users", "role", "VARCHAR(20) DEFAULT 'client_admin' NOT NULL"),
+    # Platform-level tenant suspension
+    ("businesses", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
 ]
 
 
 def _migrate_schema():
-    """Add missing columns to existing tables. Idempotent."""
+    """Add missing columns and apply constraint migrations. Idempotent."""
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
@@ -96,6 +101,21 @@ def _migrate_schema():
             if column in existing_columns:
                 continue
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+
+        # Constraint migrations (idempotent — check before altering)
+        if "admin_users" in existing_tables:
+            cols = {c["name"]: c for c in insp.get_columns("admin_users")}
+            biz = cols.get("business_id")
+            if biz is not None and not biz.get("nullable", True):
+                # Drop NOT NULL so superadmins can exist without a business
+                try:
+                    conn.execute(text(
+                        "ALTER TABLE admin_users ALTER COLUMN business_id DROP NOT NULL"
+                    ))
+                except Exception:
+                    # SQLite (used in tests) doesn't support ALTER COLUMN — and
+                    # doesn't enforce nullable constraints anyway. Safe to skip.
+                    pass
 
 
 # Default catalog of supported languages. The superadmin will manage this in the future.
@@ -263,6 +283,28 @@ def _seed_demo_data():
         ]
         db.add_all(demo_intents)
         db.commit()
+    finally:
+        db.close()
+
+
+def _promote_superadmin_by_email():
+    """If SUPERADMIN_EMAIL is configured, promote that user to superadmin
+    (and clear business_id). Idempotent — safe to run on every startup.
+    """
+    if not settings.SUPERADMIN_EMAIL:
+        return
+    from app.models.admin_user import AdminUser
+    db = SessionLocal()
+    try:
+        user = (
+            db.query(AdminUser)
+            .filter(AdminUser.email == settings.SUPERADMIN_EMAIL)
+            .first()
+        )
+        if user and user.role != "superadmin":
+            user.role = "superadmin"
+            user.business_id = None
+            db.commit()
     finally:
         db.close()
 
