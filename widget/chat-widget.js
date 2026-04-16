@@ -1,8 +1,17 @@
-(function () {
+(async function () {
   "use strict";
 
   /* ── Configuration ─────────────────────────────────────────── */
-  const script = document.currentScript;
+  // document.currentScript works for synchronous scripts. For async/defer
+  // it returns null, so we fall back to searching for the script by its
+  // src attribute. This makes the embed robust regardless of how the
+  // host site loads it (head/body, sync/async/defer).
+  function _findScript() {
+    if (document.currentScript) return document.currentScript;
+    const scripts = document.querySelectorAll('script[src*="chat-widget.js"]');
+    return scripts[scripts.length - 1] || null;
+  }
+  const script = _findScript();
   const CONFIG = {
     apiUrl: script?.getAttribute("data-api-url") || window.location.origin,
     businessId: parseInt(script?.getAttribute("data-business-id") || "1", 10),
@@ -23,14 +32,20 @@
     headerAvatarImage: "",
   };
 
-  // Fetch design from backend synchronously so CSS/HTML are generated with the
-  // admin-configured values. Falls back to data-* attributes if backend is down.
+  // Fetch design + languages asynchronously so we don't block the host
+  // page's main thread (sync XHR is deprecated and hurts Core Web Vitals).
+  // Times out at 2s — if backend is slow, widget renders with data-*
+  // attribute defaults and is still functional.
   try {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", `${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`, false);
-    xhr.send();
-    if (xhr.status === 200) {
-      const data = JSON.parse(xhr.responseText);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const res = await fetch(
+      `${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`,
+      { signal: ctrl.signal }
+    );
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
       const d = data.widget_design || {};
       if (d.color) CONFIG.primaryColor = d.color;
       if (d.position) CONFIG.position = d.position;
@@ -42,10 +57,11 @@
       if (d.header_avatar_type) CONFIG.headerAvatarType = d.header_avatar_type;
       if (d.header_avatar_emoji) CONFIG.headerAvatarEmoji = d.header_avatar_emoji;
       if (d.header_avatar_image) CONFIG.headerAvatarImage = d.header_avatar_image;
-      // Cache the fetched payload so init() doesn't refetch
-      window.__cwBootstrap = data;
+      // Cache the fetched payload under a business-specific key so two
+      // widgets for different businesses on the same page don't collide
+      window[`__cwBootstrap_${CONFIG.businessId}`] = data;
     }
-  } catch (e) { /* backend unavailable — use data-* attributes */ }
+  } catch (e) { /* timeout or network failure — use data-* attributes */ }
 
   /* ── i18n: hardcoded UI strings ────────────────────────────── */
   const I18N = {
@@ -532,7 +548,16 @@
       <div class="cw-powered">Powered by DPB Andorra</div>
     </div>
   `;
-  document.body.appendChild(root);
+  // If the host loads this script in <head> or with defer, body may not
+  // exist yet. Attach when it does.
+  function _attachRoot() {
+    if (document.body) {
+      document.body.appendChild(root);
+    } else {
+      document.addEventListener("DOMContentLoaded", () => document.body.appendChild(root), { once: true });
+    }
+  }
+  _attachRoot();
 
   /* ── DOM refs ───────────────────────────────────────────────── */
   const bubble = root.querySelector(".cw-bubble");
@@ -738,9 +763,10 @@
     if (state.initialized) return;
     try {
       let data;
-      if (window.__cwBootstrap) {
-        data = window.__cwBootstrap;
-        delete window.__cwBootstrap;
+      const bootKey = `__cwBootstrap_${CONFIG.businessId}`;
+      if (window[bootKey]) {
+        data = window[bootKey];
+        delete window[bootKey];
       } else {
         const res = await fetch(`${CONFIG.apiUrl}/business/${CONFIG.businessId}/languages`);
         if (res.ok) data = await res.json();

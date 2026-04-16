@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>Host adversario — test de aislamiento</title>
+  <!--
+    Esta página simula un "cliente malo": CSS agresivo, jQuery viejo, selectores
+    globales, etc. Si el widget sobrevive aquí, sobrevivirá en cualquier web real.
+    Pon ?lang=en en la URL para probar el force-lang.
+  -->
+  <style>
+    /* ════ CSS host hostil ════════════════════════════════════════════
+       Mezcla típica de temas WordPress antiguos: resets globales,
+       !important, selectores de tag sin namespace, box-sizing content-box.
+    */
+    * { box-sizing: content-box !important; margin: 0; padding: 0; }
+    html, body { font-family: "Comic Sans MS", cursive; background: #fef3c7; color: #7c2d12; line-height: 2; }
+    body { padding: 20px; }
+    button { background: red !important; color: yellow !important; padding: 20px !important; font-size: 30px !important; border: 5px dashed purple !important; }
+    input { background: pink !important; color: green !important; border: 3px solid orange !important; padding: 15px !important; font-size: 20px !important; }
+    svg { background: cyan !important; border: 2px solid magenta !important; }
+    a { color: hotpink !important; text-decoration: line-through !important; }
+    h1, h2, h3 { color: lime !important; text-shadow: 2px 2px red !important; }
+    div { outline: 1px dotted rgba(255, 0, 0, 0.1); }
+    .card { background: #fef08a; padding: 40px; margin: 40px 0; border: 10px dashed #dc2626; }
+
+    /* Intento de sabotear al widget por si ha dejado algún selector sin namespace */
+    .cw-open { display: none !important; }   /* si existiera como clase suelta */
+    .open { display: none !important; }      /* trampa genérica */
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🧪 Test adversario del widget</h1>
+    <p>Esta página inyecta CSS agresivo y recursos pesados para verificar que el widget sigue funcionando aislado. Abre la consola (F12) para ver warnings.</p>
+
+    <h2>¿Qué debería funcionar?</h2>
+    <ul>
+      <li>El botón flotante del chat debería verse correctamente, <strong>sin heredar</strong> el rojo / amarillo / borde morado del host.</li>
+      <li>Su ventana debería abrirse con sus colores de marca, no con los del CSS agresivo.</li>
+      <li>El input del chat no debe ser rosa con borde naranja.</li>
+      <li>Los SVG internos no deben llevar el fondo cian de arriba.</li>
+      <li>No debe haber <em>flash of unstyled content</em> (FOUC) perceptible al cargar.</li>
+      <li>El widget debe aparecer aunque el script se declare con <code>async</code> o <code>defer</code>, o aunque esté en &lt;head&gt;.</li>
+    </ul>
+
+    <h2>¿Qué comprobar en consola?</h2>
+    <ul>
+      <li>❌ Warning de <strong>Synchronous XHR</strong> → no debería salir</li>
+      <li>❌ <code>document.currentScript is null</code> → si sale, el script no se auto-localiza bien con async/defer</li>
+      <li>❌ <code>Cannot read properties of null (reading 'appendChild')</code> → problema con body no listo</li>
+      <li>✅ Una sola petición a <code>/business/1/languages</code>. Si hay dos, hay refetch innecesario.</li>
+    </ul>
+
+    <h2>Cómo probar otras configuraciones</h2>
+    <ol>
+      <li><a href="?async=1">Cargar el script con async</a></li>
+      <li><a href="?defer=1">Cargar el script con defer</a></li>
+      <li><a href="?head=1">Cargar el script en &lt;head&gt;</a></li>
+      <li><a href="?lang=en">Forzar idioma inglés</a></li>
+      <li>Móvil: abre con DevTools → modo responsive → iPhone 12 → pulsa el input del chat → verifica que el teclado no tapa el input</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Contenido largo para probar scroll</h2>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+    <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+    <p>Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    <p>Nam liber tempor cum soluta nobis eleifend option congue nihil imperdiet doming id quod mazim placerat facer possim assum.</p>
+    <p>Typi non habent claritatem insitam; est usus legentis in iis qui facit eorum claritatem.</p>
+    <p>Investigationes demonstraverunt lectores legere me lius quod ii legunt saepius.</p>
+  </div>
+
+  <!-- jQuery 1.x (lo que cargan temas antiguos de WordPress) — sólo para simular -->
+  <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+
+  <!-- Widget: se carga según ?async / ?defer / ?head -->
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const s = document.createElement("script");
+      s.src = "/widget/chat-widget.js?cb=" + Date.now();
+      s.setAttribute("data-business-id", "1");
+      s.setAttribute("data-api-url", "");
+      if (params.get("lang")) s.setAttribute("data-force-lang", params.get("lang"));
+      if (params.get("async") === "1") s.async = true;
+      if (params.get("defer") === "1") s.defer = true;
+      if (params.get("head") === "1") {
+        document.head.appendChild(s);
+      } else {
+        document.body.appendChild(s);
+      }
+    })();
+  </script>
+</body>
+</html>
