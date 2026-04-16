@@ -35,6 +35,8 @@ class Business(Base):
 
     # Platform-level: superadmin can deactivate a tenant without deleting their data
     is_active = Column(Boolean, default=True, nullable=False)
+    # Monthly token cap for this tenant (NULL = unlimited). Superadmin sets this.
+    monthly_token_quota = Column(Integer, nullable=True)
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

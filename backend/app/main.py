@@ -87,6 +87,8 @@ SCHEMA_MIGRATIONS = [
     # AI token usage tracking (for cost visibility in the superadmin panel)
     ("messages", "tokens_in", "INTEGER"),
     ("messages", "tokens_out", "INTEGER"),
+    # Monthly token quota per tenant (NULL = unlimited)
+    ("businesses", "monthly_token_quota", "INTEGER"),
 ]
 
 

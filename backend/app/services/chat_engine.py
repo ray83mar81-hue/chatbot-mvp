@@ -10,6 +10,7 @@ from app.models.intent_translation import IntentTranslation
 from app.models.message import Message
 from app.schemas.chat import ChatButton, ChatRequest, ChatResponse
 from app.services.ai_service import generate_ai_response, stream_ai_response
+from app.services.chat_limits import check_chat_gate
 from app.services.intent_matcher import match_intent
 
 
@@ -92,6 +93,16 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
         )
 
     language = _resolve_language(request.language, business)
+
+    # Gate: suspension, rate limit, monthly token quota
+    gate = check_chat_gate(business, request.session_id, db, language)
+    if not gate.ok:
+        return ChatResponse(
+            response=gate.message or "",
+            source="fallback",
+            session_id=request.session_id,
+            language=language,
+        )
 
     # Get or create conversation
     conversation = _get_or_create_conversation(
@@ -182,6 +193,15 @@ async def process_message_stream(request: ChatRequest, db: Session):
         return
 
     language = _resolve_language(request.language, business)
+
+    # Gate: suspension, rate limit, quota. Failure is surfaced as a synthetic
+    # bot message so the widget renders it naturally.
+    gate = check_chat_gate(business, request.session_id, db, language)
+    if not gate.ok:
+        yield f"data: {_json.dumps({'type': 'start', 'source': 'fallback', 'language': language})}\n\n"
+        yield f"data: {_json.dumps({'type': 'chunk', 'content': gate.message or ''})}\n\n"
+        yield f"data: {_json.dumps({'type': 'end'})}\n\n"
+        return
 
     conversation = _get_or_create_conversation(db, request.session_id, request.business_id, language)
 

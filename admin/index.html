@@ -288,7 +288,7 @@
 
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Nombre</th><th>Estado</th><th>Conversaciones</th><th>Mensajes</th><th>Tokens</th><th>Coste (USD)</th><th>Última actividad</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Estado</th><th>Conv.</th><th>Mensajes</th><th>Tokens mes</th><th>Cuota</th><th>Coste (USD)</th><th>Última act.</th><th>Acciones</th></tr></thead>
             <tbody id="tenantsBody"></tbody>
           </table>
         </div>
@@ -302,6 +302,7 @@
       <div class="section active" id="sec-dashboard">
         <div class="page-header"><h2>Dashboard</h2></div>
         <div class="stats-grid" id="statsGrid"></div>
+        <div id="usageCard" style="display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
         <div class="page-header"><h2>Top Intents</h2></div>
         <div class="table-wrap">
           <table>
@@ -910,13 +911,27 @@
           const statusBadge = t.is_active
             ? `<span class="badge" style="background:#d1fae5;color:#065f46">Activo</span>`
             : `<span class="badge" style="background:#fee2e2;color:#991b1b">Suspendido</span>`;
-          const totalTokens = (t.tokens_in + t.tokens_out).toLocaleString("es-ES");
+
+          // Monthly usage vs quota
+          const used = t.tokens_this_month || 0;
+          const quota = t.monthly_token_quota;
+          let usageCell;
+          if (quota && quota > 0) {
+            const pct = Math.min(100, Math.round((used / quota) * 100));
+            const color = pct >= 90 ? "#dc2626" : pct >= 70 ? "#f59e0b" : "#10b981";
+            usageCell = `${used.toLocaleString("es-ES")} <span style="color:${color};font-size:11px">(${pct}%)</span>`;
+          } else {
+            usageCell = used.toLocaleString("es-ES");
+          }
+          const quotaCell = `<a href="#" onclick="event.preventDefault();editQuota(${t.id}, ${quota || 0})" style="color:#2563eb">${quota ? quota.toLocaleString("es-ES") : "∞"}</a>`;
+
           return `<tr>
             <td><strong>${esc(t.name)}</strong><div style="font-size:11px;color:#9ca3af">#${t.id} · ${esc(t.admin_emails.join(", ") || "sin admin")}</div></td>
             <td>${statusBadge}</td>
             <td>${t.conversations_count}</td>
             <td>${t.messages_count}</td>
-            <td>${totalTokens}</td>
+            <td>${usageCell}</td>
+            <td>${quotaCell}</td>
             <td>$${t.cost_usd.toFixed(4)}</td>
             <td>${last}</td>
             <td style="white-space:nowrap">
@@ -927,6 +942,29 @@
         }).join("");
       } catch (e) {
         console.error("loadPlatform", e);
+      }
+    }
+
+    async function editQuota(id, current) {
+      const input = prompt(
+        `Cuota mensual de tokens para este cliente.\n\n` +
+        `Actual: ${current ? current.toLocaleString("es-ES") : "sin límite"}\n\n` +
+        `Introduce el nuevo límite (0 o vacío = sin límite):`,
+        current ? String(current) : ""
+      );
+      if (input === null) return;
+      const value = parseInt(input, 10);
+      const payload = isNaN(value) || value <= 0 ? 0 : value;
+      try {
+        const res = await fetch(`${API}/superadmin/businesses/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ monthly_token_quota: payload }),
+        });
+        if (!res.ok) throw new Error("Error");
+        await loadPlatform();
+      } catch (e) {
+        alert("Error al actualizar la cuota: " + e.message);
       }
     }
 
@@ -1017,8 +1055,12 @@
        ════════════════════════════════════════════════ */
     async function loadDashboard() {
       try {
-        const res = await fetch(`${API}/metrics/?business_id=${businessId}`);
-        const m = await res.json();
+        const [metricsRes, usageRes] = await Promise.all([
+          fetch(`${API}/metrics/?business_id=${businessId}`),
+          fetch(`${API}/metrics/usage?business_id=${businessId}`),
+        ]);
+        const m = await metricsRes.json();
+        const usage = usageRes.ok ? await usageRes.json() : null;
 
         document.getElementById("statsGrid").innerHTML = `
           <div class="stat-card"><div class="label">Conversaciones</div><div class="value">${m.total_conversations}</div></div>
@@ -1026,6 +1068,42 @@
           <div class="stat-card"><div class="label">Fallback IA</div><div class="value">${m.ai_fallback_rate}%</div></div>
           <div class="stat-card"><div class="label">Tiempo resp. medio</div><div class="value">${m.avg_response_time_ms}ms</div></div>
         `;
+
+        if (usage) {
+          const used = (usage.tokens_used || 0);
+          const quota = usage.tokens_quota;
+          let usageHtml;
+          if (quota && quota > 0) {
+            const pct = Math.min(100, Math.round((used / quota) * 100));
+            const barColor = pct >= 90 ? "#dc2626" : pct >= 70 ? "#f59e0b" : "#10b981";
+            usageHtml = `
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                <strong>${used.toLocaleString("es-ES")} / ${quota.toLocaleString("es-ES")} tokens</strong>
+                <span style="color:${barColor};font-weight:600">${pct}%</span>
+              </div>
+              <div style="background:#e5e7eb;border-radius:999px;height:8px;overflow:hidden">
+                <div style="background:${barColor};height:100%;width:${pct}%"></div>
+              </div>
+            `;
+          } else {
+            usageHtml = `<strong>${used.toLocaleString("es-ES")} tokens</strong> <span style="color:#9ca3af;font-size:13px">· sin límite mensual</span>`;
+          }
+          const intentPct = Math.round((usage.intent_ratio || 0) * 100);
+          const usageCard = document.getElementById("usageCard");
+          if (usageCard) {
+            usageCard.innerHTML = `
+              <h3 style="font-size:16px;margin-bottom:12px">Consumo IA este mes</h3>
+              ${usageHtml}
+              <div style="display:flex;gap:24px;margin-top:16px;font-size:13px;color:#6b7280">
+                <span>Mensajes intents: <strong style="color:#1f2937">${usage.intent_messages}</strong></span>
+                <span>Mensajes IA: <strong style="color:#1f2937">${usage.ai_messages}</strong></span>
+                <span>Ahorro intents: <strong style="color:#10b981">${intentPct}%</strong></span>
+                <span style="margin-left:auto">Coste estimado: <strong style="color:#1f2937">$${(usage.cost_usd || 0).toFixed(4)}</strong></span>
+              </div>
+            `;
+            usageCard.style.display = "block";
+          }
+        }
 
         const tbody = document.getElementById("topIntentsBody");
         if (m.top_intents.length === 0) {

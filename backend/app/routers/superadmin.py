@@ -18,6 +18,7 @@ from app.models.business import Business
 from app.models.contact_request import ContactRequest
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.services.chat_limits import tokens_used_this_month
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -36,6 +37,8 @@ class BusinessStats(BaseModel):
     messages_count: int
     tokens_in: int
     tokens_out: int
+    tokens_this_month: int = 0
+    monthly_token_quota: int | None = None
     cost_usd: float  # estimated
     contact_requests_count: int
     admin_emails: list[str]
@@ -51,6 +54,7 @@ class CreateTenantRequest(BaseModel):
 class UpdateTenantRequest(BaseModel):
     is_active: bool | None = None
     name: str | None = None
+    monthly_token_quota: int | None = None  # 0 or negative = clear quota (unlimited)
 
 
 class PricingResponse(BaseModel):
@@ -118,6 +122,8 @@ def _stats_for(business: Business, db: Session) -> BusinessStats:
         .all()
     ]
 
+    tokens_this_month = tokens_used_this_month(db, business.id)
+
     return BusinessStats(
         id=business.id,
         name=business.name,
@@ -129,6 +135,8 @@ def _stats_for(business: Business, db: Session) -> BusinessStats:
         messages_count=msg_count,
         tokens_in=int(tokens_in),
         tokens_out=int(tokens_out),
+        tokens_this_month=tokens_this_month,
+        monthly_token_quota=business.monthly_token_quota,
         cost_usd=_compute_cost_usd(int(tokens_in), int(tokens_out)),
         contact_requests_count=contact_count,
         admin_emails=admin_emails,
@@ -227,6 +235,11 @@ def update_tenant(
         business.is_active = data.is_active
     if data.name is not None and data.name.strip():
         business.name = data.name.strip()
+    if data.monthly_token_quota is not None:
+        # 0 or negative clears the quota (treat as unlimited)
+        business.monthly_token_quota = (
+            data.monthly_token_quota if data.monthly_token_quota > 0 else None
+        )
 
     db.commit()
     db.refresh(business)
