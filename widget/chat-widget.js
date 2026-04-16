@@ -228,8 +228,10 @@
 
   /* ── Styles ────────────────────────────────────────────────── */
   const css = `
-    .cw-root, .cw-root * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    .cw-root [hidden] { display: none !important; }
+    /* Shadow DOM encapsulates these, but keep the rules tidy regardless. */
+    :host { all: initial; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    [hidden] { display: none !important; }
 
     /* Bubble */
     .cw-bubble {
@@ -475,8 +477,14 @@
   const ICON_BOT = `<svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1.07A7 7 0 0 1 14 23h-4a7 7 0 0 1-6.93-4H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2zm-4 13a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>`;
 
   /* ── Mount ──────────────────────────────────────────────────── */
-  const root = document.createElement("div");
-  root.className = "cw-root";
+  // Shadow DOM isolates our CSS from the host page completely. The host can
+  // declare `button { background: red !important }` and our bubble won't
+  // turn red. This is what Intercom, Drift and Crisp do.
+  const host = document.createElement("div");
+  host.className = "cw-host";
+  // Host element itself should not inherit/leak styling from/to the page
+  host.style.all = "initial";
+  const root = host.attachShadow({ mode: "open" });
   root.innerHTML = `
     <style>${css}</style>
     <button class="cw-bubble" aria-label="${CONFIG.title}">${
@@ -550,14 +558,14 @@
   `;
   // If the host loads this script in <head> or with defer, body may not
   // exist yet. Attach when it does.
-  function _attachRoot() {
+  function _attachHost() {
     if (document.body) {
-      document.body.appendChild(root);
+      document.body.appendChild(host);
     } else {
-      document.addEventListener("DOMContentLoaded", () => document.body.appendChild(root), { once: true });
+      document.addEventListener("DOMContentLoaded", () => document.body.appendChild(host), { once: true });
     }
   }
-  _attachRoot();
+  _attachHost();
 
   /* ── DOM refs ───────────────────────────────────────────────── */
   const bubble = root.querySelector(".cw-bubble");
@@ -640,7 +648,8 @@
   }
 
   function hideTyping() {
-    const el = document.getElementById("cw-typing");
+    // getElementById can't pierce the shadow boundary — use the shadow root
+    const el = root.getElementById("cw-typing");
     if (el) el.remove();
   }
 
@@ -989,7 +998,11 @@
     langMenu.classList.toggle("cw-open");
   });
   document.addEventListener("click", (e) => {
-    if (!langWrap.contains(e.target)) {
+    // Events crossing the shadow boundary have their target retargeted to
+    // the host, so contains() would always be false. composedPath() walks
+    // through shadow roots and returns the actual element clicked.
+    const path = e.composedPath ? e.composedPath() : [];
+    if (!path.includes(langWrap)) {
       langMenu.classList.remove("cw-open");
     }
   });
