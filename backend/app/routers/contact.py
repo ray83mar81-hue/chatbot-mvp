@@ -22,6 +22,7 @@ from app.schemas.contact import (
     ContactRequestUpdate,
     ContactSubmit,
 )
+from app.services.incident_service import log as log_incident
 from app.services.notification_service import send_contact_notification
 
 router = APIRouter(tags=["contact"])
@@ -200,6 +201,12 @@ def submit_contact(
         send_contact_notification(contact, business)
     except Exception as e:
         print(f"[Contact notification error] {type(e).__name__}: {e}")
+        log_incident(
+            db, type="email_failed",
+            message=f"No se pudo enviar el email de notificación del contacto #{contact.id}",
+            business_id=business.id,
+            details=f"{type(e).__name__}: {e}",
+        )
 
     return contact
 

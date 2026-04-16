@@ -7,6 +7,7 @@ from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.admin_user import AdminUser
 from app.models.contact_request import ContactRequest
+from app.models.incident import Incident
 
 __all__ = [
     "Business",
@@ -18,4 +19,5 @@ __all__ = [
     "Message",
     "AdminUser",
     "ContactRequest",
+    "Incident",
 ]

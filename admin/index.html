@@ -318,6 +318,21 @@
           </table>
         </div>
 
+        <div id="incidentsBlock" style="margin-top:32px;display:none">
+          <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+            <h3 style="font-size:18px">Incidencias recientes <span id="incidentsCount" style="font-size:12px;font-weight:500;color:#6b7280"></span></h3>
+            <label style="font-size:13px;color:#6b7280;display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="incidentsUnresolvedOnly" onchange="loadIncidents()" /> Solo sin resolver
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Tipo</th><th>Cliente</th><th>Mensaje</th><th>Detalle</th><th>Cuándo</th><th></th></tr></thead>
+              <tbody id="incidentsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <p style="margin-top:16px;font-size:12px;color:#6b7280">
           Precios usados: <span id="pricingNote">cargando...</span>
         </p>
@@ -340,8 +355,42 @@
             </select>
           </div>
         </div>
+        <div id="onboardingCard" style="display:none;background:#fff;border:2px solid #fbbf24;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
+
         <div class="stats-grid" id="statsGrid"></div>
         <div id="usageCard" style="display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
+
+        <details style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin-bottom:24px;font-size:13px;color:#14532d">
+          <summary style="cursor:pointer;font-weight:600">¿Cómo funciona tu plan? Qué consume y qué no</summary>
+          <div style="margin-top:12px;line-height:1.7">
+            <p style="margin:0 0 10px"><strong>Tu plan te permite usar el chatbot con IA de forma ilimitada según la cuota mensual acordada.</strong> Lo que consume esa cuota son las respuestas generadas por IA, no las acciones de configuración.</p>
+
+            <p style="margin:12px 0 4px;font-weight:600;color:#166534">✅ SÍ consume</p>
+            <ul style="margin:4px 0 0 20px">
+              <li>Cada respuesta que genera la IA cuando la pregunta del usuario <strong>no coincide con ningún intent</strong>. El bot improvisa usando los datos del negocio.</li>
+              <li>Traducir intents o datos del negocio con el botón "Traducir con IA" (una sola vez por campo/idioma).</li>
+              <li>Traducir el histórico de una conversación concreta a otro idioma (bajo demanda).</li>
+            </ul>
+
+            <p style="margin:16px 0 4px;font-weight:600;color:#991b1b">❌ NO consume</p>
+            <ul style="margin:4px 0 0 20px">
+              <li>Respuestas servidas por un intent configurado (son instantáneas y gratis).</li>
+              <li>Cambiar idioma en el widget, abrir/cerrar el chat, cargar la página.</li>
+              <li>Navegación por el admin, editar intents, guardar cambios, subir un logo.</li>
+              <li>Tener varios idiomas activados — lo que cuenta es cuántas preguntas se respondan por IA, no el número de idiomas soportados.</li>
+            </ul>
+
+            <p style="margin:16px 0 4px;font-weight:600;color:#1e40af">💡 Cómo consumir menos</p>
+            <ul style="margin:4px 0 0 20px">
+              <li><strong>Crea intents</strong> para tus preguntas más frecuentes (horario, ubicación, precios, reservas, etc.). Las respuestas son instantáneas y no consumen.</li>
+              <li><strong>Tradúcelos con IA</strong> una vez a cada idioma soportado. Después todas las consultas en ese idioma se sirven gratis desde tu catálogo.</li>
+              <li>El panel de arriba te muestra tu <strong>% de ahorro con intents</strong>: cuanto más alto, más eficiente es tu bot.</li>
+            </ul>
+
+            <p style="margin:16px 0 0;color:#475569"><em>Si superas la cuota mensual antes de fin de mes, el chatbot seguirá respondiendo con intents, pero pausará las respuestas con IA hasta el siguiente ciclo o hasta que amplíes el plan.</em></p>
+          </div>
+        </details>
+
         <div class="page-header"><h2 style="font-size:18px">Intents más usados</h2></div>
         <div class="table-wrap">
           <table>
@@ -1111,6 +1160,7 @@
           fetch(`${API}/superadmin/businesses`),
           fetch(`${API}/superadmin/pricing`),
         ]);
+        loadIncidents();
         if (!statsRes.ok || !listRes.ok) throw new Error("Error loading platform");
         const stats = await statsRes.json();
         const list = await listRes.json();
@@ -1281,6 +1331,84 @@
       }
     }
 
+    /* ── Incidents (support log) ──────────────────────────────── */
+    async function loadIncidents() {
+      const block = document.getElementById("incidentsBlock");
+      const body = document.getElementById("incidentsBody");
+      const count = document.getElementById("incidentsCount");
+      if (!block || !body) return;
+
+      const unresolvedOnly = document.getElementById("incidentsUnresolvedOnly")?.checked ? "true" : "false";
+      try {
+        const res = await fetch(`${API}/superadmin/incidents?unresolved_only=${unresolvedOnly}&limit=100`);
+        if (!res.ok) { block.style.display = "none"; return; }
+        const incidents = await res.json();
+
+        if (!incidents.length) {
+          // Only hide the block if we're in "solo sin resolver" mode and
+          // there are truly no incidents ever. Otherwise show an empty state.
+          if (unresolvedOnly === "true") {
+            block.style.display = "block";
+            count.textContent = "";
+            body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#16a34a;padding:20px">✅ Ninguna incidencia sin resolver</td></tr>`;
+          } else {
+            block.style.display = "none";
+          }
+          return;
+        }
+
+        block.style.display = "block";
+        const unresolvedCount = incidents.filter(i => !i.resolved).length;
+        count.textContent = unresolvedCount
+          ? `— ${unresolvedCount} sin resolver`
+          : `— todas resueltas`;
+
+        const typeLabels = {
+          ai_error: "🤖 IA",
+          email_failed: "✉️ Email",
+          translation_failed: "🌐 Traducción",
+          rate_limited: "⏸️ Rate limit",
+        };
+        const typeColors = {
+          ai_error: "#fee2e2;color:#991b1b",
+          email_failed: "#fef3c7;color:#92400e",
+          translation_failed: "#e0e7ff;color:#3730a3",
+          rate_limited: "#f3f4f6;color:#4b5563",
+        };
+
+        body.innerHTML = incidents.map(i => {
+          const when = new Date(i.created_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+          const badge = `<span class="badge" style="background:${typeColors[i.type] || "#f3f4f6;color:#4b5563"}">${typeLabels[i.type] || i.type}</span>`;
+          const biz = i.business_name ? `${esc(i.business_name)} <span style="color:#9ca3af;font-size:11px">#${i.business_id}</span>` : "—";
+          const details = (i.details || "").length > 80 ? (i.details.slice(0, 80) + "…") : (i.details || "");
+          const action = i.resolved
+            ? `<span style="color:#16a34a;font-size:12px">✓ Resuelta</span>`
+            : `<button class="btn btn-sm" style="background:#d1fae5;color:#065f46" onclick="resolveIncident(${i.id})">Marcar resuelta</button>`;
+          return `<tr style="${i.resolved ? "opacity:.55" : ""}">
+            <td>${badge}</td>
+            <td>${biz}</td>
+            <td>${esc(i.message)}</td>
+            <td style="font-family:monospace;font-size:11px;color:#6b7280" title="${esc(i.details || "")}">${esc(details)}</td>
+            <td style="white-space:nowrap">${when}</td>
+            <td style="white-space:nowrap">${action}</td>
+          </tr>`;
+        }).join("");
+      } catch (e) {
+        console.error("loadIncidents", e);
+        block.style.display = "none";
+      }
+    }
+
+    async function resolveIncident(id) {
+      try {
+        const res = await fetch(`${API}/superadmin/incidents/${id}/resolve`, { method: "PATCH" });
+        if (!res.ok) throw new Error("Error");
+        await loadIncidents();
+      } catch (e) {
+        alert("Error al marcar como resuelta: " + e.message);
+      }
+    }
+
     async function toggleTenantActive(id, isActive) {
       try {
         const res = await fetch(`${API}/superadmin/businesses/${id}`, {
@@ -1367,6 +1495,126 @@
     /* ════════════════════════════════════════════════
        DASHBOARD
        ════════════════════════════════════════════════ */
+    async function renderOnboarding() {
+      // Superadmins that aren't impersonating see a platform-level view, not a
+      // tenant dashboard. Hide onboarding for them.
+      if (currentUser && currentUser.role === "superadmin" && !getImpersonation()) {
+        const el = document.getElementById("onboardingCard");
+        if (el) el.style.display = "none";
+        return;
+      }
+
+      try {
+        const [bizRes, intentsRes, landingRes, langsRes] = await Promise.all([
+          fetch(`${API}/business/${businessId}`),
+          fetch(`${API}/intents/?business_id=${businessId}`),
+          fetch(`${API}/business/${businessId}/landing`),
+          fetch(`${API}/business/${businessId}/languages`),
+        ]);
+        const biz = bizRes.ok ? await bizRes.json() : {};
+        const intents = intentsRes.ok ? await intentsRes.json() : [];
+        const landing = landingRes.ok ? await landingRes.json() : { landing_enabled: false };
+        const langs = langsRes.ok ? await langsRes.json() : { supported: [] };
+
+        // 5 steps — each returns { done, label, action }
+        const steps = [
+          {
+            done: !!(biz.name && biz.description && biz.phone && biz.email && biz.schedule && biz.schedule !== "{}"),
+            label: "Completa los datos de tu negocio (nombre, descripción, contacto, horario)",
+            section: "business", subtab: "datos",
+          },
+          {
+            done: intents.length >= 3,
+            label: `Crea al menos 3 intents (tienes ${intents.length})`,
+            section: "intents",
+          },
+          {
+            done: (langs.supported || []).length >= 2,
+            label: "Activa los idiomas en los que hablan tus clientes",
+            section: "business", subtab: "idiomas",
+          },
+          {
+            done: !!(biz.widget_design && JSON.parse(biz.widget_design || "{}").color),
+            label: "Personaliza el widget (color, icono, posición)",
+            section: "embed",
+          },
+          {
+            done: !!landing.landing_enabled,
+            label: "Publica tu página web pública (opcional si ya tienes web propia)",
+            section: "business", subtab: "web",
+            optional: true,
+          },
+        ];
+
+        const remaining = steps.filter(s => !s.done && !s.optional).length;
+        const allDone = remaining === 0;
+
+        const card = document.getElementById("onboardingCard");
+        if (!card) return;
+
+        // Dismissed flag — if user marked the card as dismissed and everything
+        // essential is done, keep it hidden. Re-shows if anything regresses.
+        if (allDone && localStorage.getItem(`onboarding_dismissed_${businessId}`) === "1") {
+          card.style.display = "none";
+          return;
+        }
+
+        card.style.display = "block";
+        const title = allDone
+          ? "🎉 Tu chatbot está configurado correctamente"
+          : `Configuración de tu chatbot (${steps.filter(s => s.done).length} de ${steps.length})`;
+        const subtitle = allDone
+          ? "Has completado los pasos básicos. Puedes seguir afinando intents y textos en cualquier momento."
+          : "Completa estos pasos para sacar el máximo partido al chatbot.";
+
+        const dismissBtn = allDone
+          ? `<button onclick="dismissOnboarding()" style="background:#e5e7eb;color:#1f2937;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">Ocultar</button>`
+          : "";
+
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
+            <div>
+              <h3 style="margin:0;font-size:18px;color:#92400e">${title}</h3>
+              <p style="margin:4px 0 0;font-size:13px;color:#78716c">${subtitle}</p>
+            </div>
+            ${dismissBtn}
+          </div>
+          <ul style="list-style:none;padding:0;margin:0">
+            ${steps.map((s, i) => `
+              <li style="padding:10px 0;border-top:${i === 0 ? "none" : "1px solid #fef3c7"};display:flex;align-items:center;gap:12px">
+                <span style="font-size:18px">${s.done ? "✅" : "◯"}</span>
+                <span style="flex:1;${s.done ? "color:#78716c;text-decoration:line-through" : ""}">${esc(s.label)}${s.optional ? ' <span style="color:#9ca3af;font-size:12px">(opcional)</span>' : ""}</span>
+                ${s.done ? "" : `<button onclick="goOnboardingStep('${s.section}','${s.subtab || ""}')" style="background:#fbbf24;color:#78350f;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">Ir →</button>`}
+              </li>
+            `).join("")}
+          </ul>
+        `;
+      } catch (e) {
+        console.error("renderOnboarding", e);
+        const card = document.getElementById("onboardingCard");
+        if (card) card.style.display = "none";
+      }
+    }
+
+    function goOnboardingStep(section, subtab) {
+      // Navigate to the section and optional sub-tab
+      document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+      const navItem = document.querySelector(`[data-section="${section}"]`);
+      if (navItem) {
+        navItem.classList.add("active");
+        navItem.click();
+      }
+      if (subtab) {
+        setTimeout(() => switchBizTab(subtab), 100);
+      }
+    }
+
+    function dismissOnboarding() {
+      localStorage.setItem(`onboarding_dismissed_${businessId}`, "1");
+      const card = document.getElementById("onboardingCard");
+      if (card) card.style.display = "none";
+    }
+
     async function loadDashboard() {
       try {
         const days = parseInt(document.getElementById("dashboardPeriod")?.value || "30", 10);
@@ -1376,6 +1624,9 @@
         ]);
         const m = await metricsRes.json();
         const usage = usageRes.ok ? await usageRes.json() : null;
+
+        // Onboarding checklist — fire-and-forget, doesn't block rest of dashboard
+        renderOnboarding();
 
         document.getElementById("statsGrid").innerHTML = `
           <div class="stat-card"><div class="label">Conversaciones</div><div class="value">${m.total_conversations}</div></div>

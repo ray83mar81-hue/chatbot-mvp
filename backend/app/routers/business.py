@@ -16,6 +16,7 @@ from app.schemas.business_translation import (
     TranslateBusinessRequest,
 )
 from app.services.business_translation_service import translate_business
+from app.services.incident_service import log as log_incident
 from app.services.translation_service import TranslationError
 
 router = APIRouter(prefix="/business", tags=["business"])
@@ -188,6 +189,12 @@ async def translate_business_endpoint(
             overwrite_reviewed=request.overwrite_reviewed,
         )
     except TranslationError as e:
+        log_incident(
+            db, type="translation_failed",
+            message=f"Fallo traduciendo datos del negocio #{business.id}",
+            business_id=business.id,
+            details=str(e),
+        )
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     return results

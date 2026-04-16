@@ -9,8 +9,9 @@ from app.models.intent import Intent
 from app.models.intent_translation import IntentTranslation
 from app.models.message import Message
 from app.schemas.chat import ChatButton, ChatRequest, ChatResponse
-from app.services.ai_service import generate_ai_response, stream_ai_response
+from app.services.ai_service import AIError, ai_fallback_message, generate_ai_response, stream_ai_response
 from app.services.chat_limits import check_chat_gate
+from app.services.incident_service import log as log_incident
 from app.services.intent_matcher import match_intent
 
 
@@ -142,12 +143,22 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
         # Exclude the message we just saved (it goes in user_message param)
         history = [m for m in history if m.id != user_msg.id]
 
-        response_text, tokens_in, tokens_out = await generate_ai_response(
-            business=business,
-            conversation_history=history,
-            user_message=request.message,
-            language=language,
-        )
+        try:
+            response_text, tokens_in, tokens_out = await generate_ai_response(
+                business=business,
+                conversation_history=history,
+                user_message=request.message,
+                language=language,
+            )
+        except AIError as err:
+            log_incident(
+                db, type="ai_error",
+                message=f"Chat AI call failed for business {business.id}",
+                business_id=business.id,
+                details=str(err),
+            )
+            response_text = ai_fallback_message(business)
+            tokens_in = tokens_out = None
         source = "ai"
         intent_name = None
         intent_id = None
@@ -251,6 +262,13 @@ async def process_message_stream(request: ChatRequest, db: Session):
         intent_id = None
         _stream_tokens_in = usage.get("tokens_in")
         _stream_tokens_out = usage.get("tokens_out")
+        if usage.get("_error"):
+            log_incident(
+                db, type="ai_error",
+                message=f"Streaming AI call failed for business {business.id}",
+                business_id=business.id,
+                details=usage["_error"],
+            )
 
     bot_msg = Message(
         conversation_id=conversation.id,

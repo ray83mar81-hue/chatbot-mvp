@@ -22,6 +22,7 @@ from app.schemas.intent_translation import (
     TranslateIntentRequest,
     TranslateIntentResponse,
 )
+from app.services.incident_service import log as log_incident
 from app.services.translation_service import TranslationError, translate_intent
 
 router = APIRouter(prefix="/intents", tags=["intents"])
@@ -298,6 +299,12 @@ async def translate_intent_endpoint(
             overwrite_reviewed=request.overwrite_reviewed,
         )
     except TranslationError as e:
+        log_incident(
+            db, type="translation_failed",
+            message=f"Fallo traduciendo intent #{intent.id} ('{intent.name}')",
+            business_id=intent.business_id,
+            details=str(e),
+        )
         raise HTTPException(status_code=502, detail=str(e)) from e
 
     return TranslateIntentResponse(

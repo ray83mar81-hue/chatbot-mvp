@@ -126,13 +126,27 @@ async def _anthropic_chat(system: str, messages: list[dict], max_tokens: int = 5
     return text, (usage.input_tokens if usage else None), (usage.output_tokens if usage else None)
 
 
+class AIError(Exception):
+    """Raised when the AI provider fails. Callers handle fallback + logging."""
+
+
+def ai_fallback_message(business: Business) -> str:
+    return (
+        f"Lo siento, no puedo responder a eso ahora mismo. "
+        f"Puedes contactarnos en {business.phone} o {business.email}."
+    )
+
+
 async def generate_ai_response(
     business: Business,
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
 ) -> tuple[str, int | None, int | None]:
-    """Generate a response and return (text, tokens_in, tokens_out)."""
+    """Generate a response and return (text, tokens_in, tokens_out).
+    Raises AIError on provider failure — the caller decides how to recover
+    (typically: log an incident and fall back to a canned message).
+    """
     system_prompt = _build_system_prompt(business, language)
     messages = _build_messages(conversation_history, user_message)
 
@@ -141,12 +155,7 @@ async def generate_ai_response(
             return await _openai_chat(system_prompt, messages)
         return await _anthropic_chat(system_prompt, messages)
     except Exception as e:
-        print(f"[AI Error] {type(e).__name__}: {e}")
-        fallback = (
-            f"Lo siento, no puedo responder a eso ahora mismo. "
-            f"Puedes contactarnos en {business.phone} o {business.email}."
-        )
-        return fallback, None, None
+        raise AIError(f"{type(e).__name__}: {e}") from e
 
 
 async def stream_ai_response(
@@ -198,11 +207,11 @@ async def stream_ai_response(
                         usage_out["tokens_in"] = u.input_tokens
                         usage_out["tokens_out"] = u.output_tokens
     except Exception as e:
+        # Surface the error via the shared usage dict so the caller can log it
+        if usage_out is not None:
+            usage_out["_error"] = f"{type(e).__name__}: {e}"
         print(f"[AI Stream Error] {type(e).__name__}: {e}")
-        yield (
-            f"Lo siento, no puedo responder a eso ahora mismo. "
-            f"Puedes contactarnos en {business.phone} o {business.email}."
-        )
+        yield ai_fallback_message(business)
 
 
 # ── JSON-only helper used by translation services ────────────────────────

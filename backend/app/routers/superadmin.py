@@ -17,6 +17,7 @@ from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.contact_request import ContactRequest
 from app.models.conversation import Conversation
+from app.models.incident import Incident
 from app.models.message import Message
 from app.services.chat_limits import tokens_used_this_month
 
@@ -326,4 +327,80 @@ def global_stats(
         total_tokens_in_30d=int(tin_30d),
         total_tokens_out_30d=int(tout_30d),
         total_cost_usd_30d=_compute_cost_usd(int(tin_30d), int(tout_30d)),
+    )
+
+
+# ── Incidents (support log) ──────────────────────────────────────────
+
+
+class IncidentResponse(BaseModel):
+    id: int
+    business_id: int | None = None
+    business_name: str | None = None
+    type: str
+    message: str
+    details: str = ""
+    resolved: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/incidents", response_model=list[IncidentResponse])
+def list_incidents(
+    unresolved_only: bool = False,
+    type: str | None = None,
+    limit: int = 100,
+    _: AdminUser = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Incident).order_by(Incident.created_at.desc())
+    if unresolved_only:
+        q = q.filter(Incident.resolved.is_(False))
+    if type:
+        q = q.filter(Incident.type == type)
+    incidents = q.limit(max(1, min(500, limit))).all()
+
+    # Enrich with business name (avoids the admin having to cross-reference IDs)
+    biz_ids = {i.business_id for i in incidents if i.business_id}
+    names = {}
+    if biz_ids:
+        for b in db.query(Business.id, Business.name).filter(Business.id.in_(biz_ids)).all():
+            names[b.id] = b.name
+
+    return [
+        IncidentResponse(
+            id=i.id,
+            business_id=i.business_id,
+            business_name=names.get(i.business_id) if i.business_id else None,
+            type=i.type,
+            message=i.message,
+            details=i.details or "",
+            resolved=bool(i.resolved),
+            created_at=i.created_at,
+        )
+        for i in incidents
+    ]
+
+
+@router.patch("/incidents/{incident_id}/resolve", response_model=IncidentResponse)
+def resolve_incident(
+    incident_id: int,
+    _: AdminUser = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    incident.resolved = True
+    db.commit()
+    db.refresh(incident)
+    return IncidentResponse(
+        id=incident.id,
+        business_id=incident.business_id,
+        type=incident.type,
+        message=incident.message,
+        details=incident.details or "",
+        resolved=True,
+        created_at=incident.created_at,
     )
