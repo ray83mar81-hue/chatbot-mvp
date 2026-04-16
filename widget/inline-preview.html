@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Preview del widget</title>
+  <link rel="icon" href="data:," />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f3f4f6; color: #1f2937; }
+    .canvas {
+      min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 40px 20px; text-align: center;
+    }
+    .hint { color: #6b7280; font-size: 13px; max-width: 320px; line-height: 1.5; }
+    .hint strong { color: #374151; }
+    .arrow { font-size: 32px; color: #9ca3af; margin: 12px auto; animation: bounce 1.5s infinite; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(8px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="hint">
+      <strong>Vista previa del widget.</strong><br>
+      Se carga con los valores actuales guardados en tu configuración.<br>
+      Haz clic en la burbuja para ver cómo queda abierto.
+    </div>
+    <div class="arrow" id="arrow">↘</div>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const bizId = params.get("b") || "1";
+      const position = params.get("pos");
+      const s = document.createElement("script");
+      s.src = "/widget/chat-widget.js?v=" + Date.now();
+      s.setAttribute("data-business-id", bizId);
+      document.body.appendChild(s);
+
+      // Flip the arrow direction if the bubble is on the left
+      if (position === "left") {
+        document.getElementById("arrow").textContent = "↙";
+      }
+    })();
+  </script>
+</body>
+</html>

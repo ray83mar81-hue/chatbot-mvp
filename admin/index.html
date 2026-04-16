@@ -748,9 +748,15 @@
             </div>
 
             <div id="embedDesignMsg" style="display:none;margin-top:16px"></div>
-            <div style="display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;align-items:center">
+            <div style="display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid #f3f4f6;align-items:center;flex-wrap:wrap">
               <button class="btn btn-primary" onclick="saveWidgetDesign()">Guardar diseño</button>
-              <a href="/widget/preview.html" target="_blank" class="btn" style="background:#e5e7eb;color:#1f2937;text-decoration:none">Ver demo</a>
+              <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="refreshInlinePreview()">↻ Recargar preview</button>
+              <a href="/widget/preview.html" target="_blank" style="font-size:13px;color:#2563eb;margin-left:auto">Abrir demo completa en nueva pestaña ↗</a>
+            </div>
+
+            <div style="margin-top:20px">
+              <div style="font-size:13px;color:#6b7280;margin-bottom:8px">Vista previa en vivo — clica la burbuja para abrir el chat</div>
+              <iframe id="inlinePreviewFrame" src="" style="width:100%;height:520px;border:1px solid #e5e7eb;border-radius:12px;background:#f9fafb"></iframe>
             </div>
           </div>
 
@@ -1517,7 +1523,7 @@
         if (section === "conversations") loadConversations();
         if (section === "business") loadBusiness();
         if (section === "contacts") loadContacts();
-        if (section === "embed") { loadBusiness().then(() => { updateEmbed(); }); }
+        if (section === "embed") { loadBusiness().then(() => { updateEmbed(); refreshInlinePreview(); }); }
         if (section === "team") loadTeam();
       });
     });
@@ -4089,6 +4095,14 @@
       document.getElementById("embedAvatarImageWrap").style.display = t === "image" ? "block" : "none";
     }
 
+    function refreshInlinePreview() {
+      const iframe = document.getElementById("inlinePreviewFrame");
+      if (!iframe) return;
+      const pos = (bizWidgetState.design && bizWidgetState.design.position) || "right";
+      // Cache-bust the src so the iframe fetches a fresh widget every time
+      iframe.src = `/widget/inline-preview.html?b=${businessId}&pos=${pos}&v=${Date.now()}`;
+    }
+
     async function saveWidgetDesign() {
       const msgEl = document.getElementById("embedDesignMsg");
       msgEl.style.display = "none";
@@ -4117,9 +4131,11 @@
           throw new Error(data.detail || "Error al guardar");
         }
         bizWidgetState.design = design;
-        msgEl.textContent = "Diseño guardado correctamente. Recarga la página donde tengas el widget para ver los cambios.";
+        msgEl.textContent = "Diseño guardado correctamente.";
         msgEl.className = "success-msg";
         msgEl.style.display = "block";
+        // Refresh the inline preview so the admin sees the new design right away
+        refreshInlinePreview();
       } catch (e) {
         msgEl.textContent = e.message;
         msgEl.className = "error-msg";
