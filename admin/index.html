@@ -405,6 +405,7 @@
         <div class="page-header">
           <h2>Intents</h2>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" style="background:#ede9fe;color:#5b21b6" onclick="openAiPromptModal()" title="Genera intents a partir de la info del negocio usando ChatGPT/Claude">🪄 Generar con IA externa</button>
             <button class="btn" style="background:#fef3c7;color:#92400e" onclick="openTemplatesModal()">✨ Plantillas por sector</button>
             <button class="btn" id="translateAllIntentsBtn" style="background:#dbeafe;color:#1e40af" onclick="translateAllIntents()">Traducir todos con IA</button>
             <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="openImportModal()">Importar CSV</button>
@@ -857,6 +858,51 @@
         <button class="btn btn-danger btn-sm" onclick="deleteContact()" style="margin-right:auto">Borrar (RGPD)</button>
         <button class="btn btn-secondary" onclick="closeContactModal()">Cerrar</button>
         <button class="btn btn-primary" onclick="saveContactStatus()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: AI prompt generator ═══════ -->
+  <div class="modal-overlay" id="aiPromptModal">
+    <div class="modal" style="width:760px;max-width:95vw">
+      <h3>🪄 Generar intents con IA externa</h3>
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 16px">
+        Copia el prompt, pégalo en ChatGPT o Claude junto con la descripción de tu negocio.
+        Te devolverá un CSV listo para importar desde el botón "Importar CSV". El prompt está
+        diseñado para <strong>evitar conflictos</strong> de keywords y asignar prioridades sensatas.
+      </p>
+
+      <div class="form-group">
+        <label>Información del negocio <span style="color:#9ca3af;font-weight:400">(opcional — si la rellenas se pre-inyecta al final del prompt)</span></label>
+        <textarea id="aiPromptBizInfo" rows="5" placeholder="Cuéntale a la IA qué hace tu negocio: servicios, productos concretos, horarios, ubicación, formas de contacto, público objetivo... Cuanto más detallado, mejores intents."></textarea>
+        <p class="md-hint">Consejo: copia lo que tengas en <strong>Negocio → Datos del negocio</strong> (descripción + info extra + horarios) y pégalo aquí.</p>
+      </div>
+
+      <div class="form-group">
+        <label>Prompt completo <span style="color:#9ca3af;font-weight:400">(se regenera al editar arriba)</span></label>
+        <textarea id="aiPromptText" rows="14" readonly style="font-family:monospace;font-size:12px;background:#f9fafb"></textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="btn btn-primary" onclick="copyAiPrompt()">📋 Copiar prompt</button>
+        <a href="https://chat.openai.com/" target="_blank" rel="noopener" class="btn" style="background:#10a37f;color:#fff;text-decoration:none">Abrir ChatGPT ↗</a>
+        <a href="https://claude.ai/new" target="_blank" rel="noopener" class="btn" style="background:#cc785c;color:#fff;text-decoration:none">Abrir Claude ↗</a>
+        <span id="aiPromptCopied" style="display:none;color:#059669;font-size:13px;font-weight:600">✓ Copiado</span>
+      </div>
+
+      <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:10px 14px;border-radius:6px;margin-top:16px;font-size:13px;color:#14532d">
+        <strong>Próximos pasos:</strong>
+        <ol style="margin:4px 0 0 20px;padding:0">
+          <li>Copia el prompt con el botón de arriba</li>
+          <li>Pégalo en ChatGPT / Claude</li>
+          <li>Copia el CSV que te devuelva</li>
+          <li>Cierra este modal → <strong>Importar CSV</strong> → pega el contenido</li>
+          <li>Revisa el banner de conflictos (debe decir 0). Si hay alguno, edita la keyword concreta</li>
+        </ol>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeAiPromptModal()">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1890,6 +1936,133 @@
       captureCurrentTab();
       intentState.currentTab = code;
       renderIntentTabs();
+    }
+
+    /* ── AI prompt generator ──────────────────────────────────── */
+    const AI_INTENT_PROMPT_TEMPLATE = `Eres un experto en diseño de intents para chatbots. Necesito que generes los intents de un chatbot a partir de la información de un negocio que te voy a pasar al final. Sigue estas reglas ESTRICTAMENTE:
+
+# REGLAS DE DISEÑO
+
+## 1. Identifica los temas
+Lee la información del negocio y detecta los 5-12 temas sobre los que sus clientes preguntarán (horarios, ubicación, precios, productos concretos, contacto, servicios, etc.).
+
+## 2. Cada intent tiene:
+- name: identificador snake_case en español, 1-3 palabras (ej: "horarios", "reservar_mesa", "pedir_paella"). Sin espacios ni mayúsculas.
+- keywords: 4-8 palabras/frases disparadoras (separadas por coma)
+- response: respuesta CONCRETA de 1-3 frases. Puedes usar markdown ligero: **negrita**, *cursiva*, [texto](url), listas con "- ".
+- priority: entero 0-20 (ver regla 5)
+
+## 3. KEYWORDS: evita estas palabras como keywords sueltas
+De, a, en, con, por, para, sobre, y, o, que, si, como, cuando, donde, hola, buenos, buenas, yo, tú, me, mi, tu, tener, querer, saber, poder, hacer. Son demasiado genéricas y disparan en cualquier frase.
+
+Usa nombres CONCRETOS del dominio (paella, alérgeno, parking, envío) y verbos ESPECÍFICOS (encargar, reservar, devolver, cancelar).
+
+## 4. NUNCA repitas una keyword entre intents
+Cada palabra disparadora aparece en UN SOLO intent. Si dos intents comparten tema parcial, reformula las keywords del más genérico para que no incluyan el término específico.
+
+Ejemplo INCORRECTO:
+- intent "arroces": paella, arroz, fideua
+- intent "encargar_paella": encargar paella, pedir paella
+→ "paella" coincide con "encargar paella" (substring) y generaría conflicto.
+
+Ejemplo CORRECTO:
+- intent "carta_arroces": arroz, arroces, fideua, risotto (NO incluye "paella" sola)
+- intent "encargar_paella": encargar, encargo, pedir paella, reservar paella
+→ No hay solapamiento.
+
+## 5. PRIORIDADES (campo priority, 0-20)
+Usa este criterio:
+- 15 = Intents MUY específicos (combinan 2+ conceptos: "encargar paella", "cancelar reserva", "devolver producto")
+- 10 = Intents estándar sobre un tema frecuente (horarios, ubicación, contacto, envíos)
+- 5 = Intents genéricos o de menor urgencia (sobre nosotros, idiomas que hablamos, métodos de pago)
+- 20 = Reservar SOLO para intents de emergencia o legalmente críticos (cancelar, devolver, urgencias médicas, GDPR)
+
+Regla de oro: si dos intents PODRÍAN activarse con la misma pregunta, el más específico debe tener prioridad mayor. Ejemplo: "carta_arroces" prio 10, "encargar_paella" prio 15.
+
+## 6. TONO de las respuestas
+Cercano pero profesional. Nada de "nosotros" corporativo ni "usted". Evita redundancias. Termina a veces con una pregunta abierta o sugerencia de acción si aplica (llamar, reservar, etc.).
+
+# FORMATO DE SALIDA
+
+Devuelve SOLO un CSV con las siguientes columnas exactas (respeta el header):
+
+name,keywords,response,priority,button_url,button_label
+
+- Las respuestas que contengan comas, comillas o saltos de línea, envuélvelas en comillas dobles y escapa las comillas internas como "".
+- button_url y button_label pueden estar vacíos salvo que el intent sugiera una acción clara (reservar, ver menú, descargar, etc.), en cuyo caso genera un placeholder útil (ej: button_label="Reservar mesa").
+
+# ANTES DE DEVOLVER
+Haz una última pasada mental:
+1. ¿Hay keywords repetidas o substring entre intents? Si sí, reescribe.
+2. ¿Hay intents con priority=10 que podrían pisarse? Sube uno a 15.
+3. ¿Las keywords son todas palabras concretas del dominio, no fillers?
+4. ¿Cubres 5-12 temas principales? Ni menos ni más.
+
+# INFORMACIÓN DEL NEGOCIO
+
+{BUSINESS_INFO}`;
+
+    function _buildAiPrompt(bizInfo) {
+      const info = (bizInfo || "").trim() || "[PEGAR AQUÍ LA DESCRIPCIÓN DE TU NEGOCIO]";
+      return AI_INTENT_PROMPT_TEMPLATE.replace("{BUSINESS_INFO}", info);
+    }
+
+    function _regenerateAiPromptText() {
+      const info = document.getElementById("aiPromptBizInfo").value;
+      document.getElementById("aiPromptText").value = _buildAiPrompt(info);
+    }
+
+    async function openAiPromptModal() {
+      // Pre-fill business info from the current business data, if available
+      let bizInfo = "";
+      try {
+        const res = await fetch(`${API}/business/${businessId}`);
+        if (res.ok) {
+          const b = await res.json();
+          const parts = [];
+          if (b.name) parts.push(`Nombre: ${b.name}`);
+          if (b.description) parts.push(`Descripción: ${b.description}`);
+          if (b.address) parts.push(`Dirección: ${b.address}`);
+          if (b.phone) parts.push(`Teléfono: ${b.phone}`);
+          if (b.email) parts.push(`Email: ${b.email}`);
+          if (b.schedule && b.schedule !== "{}") {
+            try {
+              const sch = JSON.parse(b.schedule);
+              if (Object.keys(sch).length) {
+                parts.push("Horarios:\n" + Object.entries(sch).map(([d, h]) => `  - ${d}: ${h}`).join("\n"));
+              }
+            } catch (e) {}
+          }
+          if (b.extra_info) parts.push(`Información extra:\n${b.extra_info}`);
+          bizInfo = parts.join("\n\n");
+        }
+      } catch (e) { /* non-critical */ }
+
+      document.getElementById("aiPromptBizInfo").value = bizInfo;
+      _regenerateAiPromptText();
+      document.getElementById("aiPromptCopied").style.display = "none";
+      document.getElementById("aiPromptModal").classList.add("open");
+
+      // Live-update the prompt as the user edits the business info
+      const bizEl = document.getElementById("aiPromptBizInfo");
+      bizEl.oninput = _regenerateAiPromptText;
+    }
+
+    function closeAiPromptModal() {
+      document.getElementById("aiPromptModal").classList.remove("open");
+    }
+
+    function copyAiPrompt() {
+      const text = document.getElementById("aiPromptText").value;
+      navigator.clipboard.writeText(text).then(() => {
+        const msg = document.getElementById("aiPromptCopied");
+        msg.style.display = "inline";
+        setTimeout(() => { msg.style.display = "none"; }, 2500);
+      }).catch(() => {
+        // Fallback: select the textarea and let the user Ctrl+C
+        document.getElementById("aiPromptText").select();
+        alert("Pulsa Ctrl+C para copiar. El prompt está seleccionado.");
+      });
     }
 
     /* ── Bulk delete intents ──────────────────────────────────── */
