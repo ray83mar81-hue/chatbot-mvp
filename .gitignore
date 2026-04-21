@@ -18,6 +18,11 @@ venv/
 # IDE
 .vscode/
 .idea/
+.claude/
+
+# Local demo / sensitive notes (contraseñas, credenciales)
+acceso demo.txt
+acceso*.txt
 
 # OS
 .DS_Store
