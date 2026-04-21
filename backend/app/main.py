@@ -58,6 +58,7 @@ def on_startup():
     _seed_demo_data()
     _backfill_intent_translations()
     _backfill_business_translations()
+    _migrate_intents_to_extra_info()
     _promote_superadmin_by_email()
 
 
@@ -347,6 +348,97 @@ def _promote_superadmin_by_email():
             user.role = "superadmin"
             user.business_id = None
             db.commit()
+    finally:
+        db.close()
+
+
+# Marker placed at the top of the migrated block. Used for idempotency:
+# if the marker is already present in a business_translations.extra_info,
+# the migration skips that row. Safe to leave in place — it's an HTML
+# comment so it doesn't render in the landing page markdown.
+# Will be removed together with the intents tables in Fase 3 commit 2.
+INTENT_MIGRATION_MARKER = "<!-- intents-migrated -->"
+
+
+def _migrate_intents_to_extra_info():
+    """Fold each business's active Intent responses into business_translations.extra_info.
+
+    Idempotent per (business_id, language_code) via the marker. Does NOT touch
+    Intent / IntentTranslation rows — those stay intact while the migration
+    output is validated. Removal happens in a follow-up commit.
+
+    Shape of the appended block:
+
+        <!-- intents-migrated -->
+        **Preguntas frecuentes (migradas de intents):**
+
+        ## {intent.name}
+        {localized response}
+        Enlace: [{button_label}]({button_url})
+
+        ## {other intent}
+        ...
+    """
+    db = SessionLocal()
+    try:
+        businesses = db.query(Business).all()
+        for biz in businesses:
+            intents = (
+                db.query(Intent)
+                .filter(Intent.business_id == biz.id, Intent.is_active.is_(True))
+                .order_by(Intent.priority.desc(), Intent.id)
+                .all()
+            )
+            if not intents:
+                continue
+
+            # index: intent_id → {lang_code: IntentTranslation}
+            trans_by_intent_lang: dict[int, dict[str, IntentTranslation]] = {}
+            for intent in intents:
+                trans_by_intent_lang[intent.id] = {
+                    tr.language_code: tr for tr in intent.translations
+                }
+
+            biz_trs = (
+                db.query(BusinessTranslation)
+                .filter(BusinessTranslation.business_id == biz.id)
+                .all()
+            )
+
+            for biz_tr in biz_trs:
+                if INTENT_MIGRATION_MARKER in (biz_tr.extra_info or ""):
+                    continue  # already migrated for this (biz, lang)
+
+                lang = biz_tr.language_code
+                blocks = []
+                for intent in intents:
+                    tr = trans_by_intent_lang.get(intent.id, {}).get(lang)
+                    if not tr:
+                        continue  # intent has no translation in this language → skip
+                    response = (tr.response or "").strip()
+                    if not response:
+                        continue
+                    lines = [f"## {intent.name}", response]
+                    if intent.button_url:
+                        label = (tr.button_label or intent.name).strip()
+                        url = intent.button_url.replace("{lang}", lang)
+                        lines.append(f"Enlace: [{label}]({url})")
+                    blocks.append("\n".join(lines))
+
+                if not blocks:
+                    continue
+
+                existing = (biz_tr.extra_info or "").rstrip()
+                separator = "\n\n---\n\n" if existing else ""
+                header = f"{INTENT_MIGRATION_MARKER}\n**Preguntas frecuentes (migradas de intents):**"
+                body = "\n\n".join(blocks)
+                biz_tr.extra_info = f"{existing}{separator}{header}\n\n{body}"
+                print(
+                    f"[intent-migration] business {biz.id} ({biz.name}), "
+                    f"lang {lang}: {len(blocks)} intent(s) folded into extra_info"
+                )
+
+        db.commit()
     finally:
         db.close()
 
