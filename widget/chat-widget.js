@@ -331,6 +331,31 @@
     .cw-lang-option-flag { font-size: 18px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; }
     .cw-lang-option-flag img { width: 22px; height: 16px; object-fit: cover; border-radius: 2px; }
 
+    /* Action buttons row (chips) */
+    .cw-actions-row {
+      display: flex; gap: 6px;
+      padding: 8px 12px;
+      overflow-x: auto;
+      background: #fafafa;
+      border-bottom: 1px solid #e5e7eb;
+      scrollbar-width: thin;
+      flex-shrink: 0;
+    }
+    .cw-actions-row:empty { display: none; }
+    .cw-actions-row::-webkit-scrollbar { height: 4px; }
+    .cw-actions-row::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+    .cw-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 999px;
+      background: #fff; border: 1px solid #e5e7eb;
+      font-size: 13px; font-weight: 500; color: #374151;
+      white-space: nowrap; cursor: pointer; flex-shrink: 0;
+      text-decoration: none; font-family: inherit;
+      transition: background .12s, color .12s, border-color .12s;
+    }
+    .cw-chip:hover { background: ${CONFIG.primaryColor}; color: #fff; border-color: transparent; }
+    .cw-chip-icon { font-size: 15px; line-height: 1; }
+
     /* Messages area */
     .cw-messages {
       flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px;
@@ -528,6 +553,7 @@
       </div>
       <!-- Chat view -->
       <div class="cw-view-chat">
+        <div class="cw-actions-row"></div>
         <div class="cw-messages"></div>
         <div class="cw-input-area">
           <input class="cw-input" type="text" autocomplete="off" />
@@ -577,6 +603,7 @@
   const window_ = root.querySelector(".cw-window");
   const closeBtn = root.querySelector(".cw-close");
   const messagesEl = root.querySelector(".cw-messages");
+  const actionsRowEl = root.querySelector(".cw-actions-row");
   const input = root.querySelector(".cw-input");
   const sendBtn = root.querySelector(".cw-send");
   const titleEl = root.querySelector(".cw-header-info h3");
@@ -810,6 +837,66 @@
     renderLanguageMenu();
     clearMessages();
     showWelcome();
+    loadActionButtons();
+  }
+
+  /* ── Action buttons (chips row) ──────────────────────────── */
+
+  function defaultIconForType(type) {
+    switch (type) {
+      case "call": return "📞";
+      case "whatsapp": return "💬";
+      case "map": return "📍";
+      case "menu": return "📋";
+      case "url": return "🔗";
+      default: return "⭐";
+    }
+  }
+
+  function resolveActionHref(btn) {
+    const value = (btn.value || "").trim();
+    if (!value) return "#";
+    switch (btn.type) {
+      case "call":
+        return "tel:" + value.replace(/\s+/g, "");
+      case "whatsapp":
+        return "https://wa.me/" + value.replace(/\D/g, "");
+      case "map":
+        if (/^https?:\/\//i.test(value)) return value;
+        return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(value);
+      default:
+        return value;  // menu, url, custom
+    }
+  }
+
+  async function loadActionButtons() {
+    if (!actionsRowEl) return;
+    try {
+      const url = `${CONFIG.apiUrl}/business/${CONFIG.businessId}/action-buttons?lang=${encodeURIComponent(state.currentLang || "es")}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) { actionsRowEl.innerHTML = ""; return; }
+      const buttons = await res.json();
+      renderActionButtons(buttons);
+    } catch (e) {
+      actionsRowEl.innerHTML = "";
+    }
+  }
+
+  function renderActionButtons(buttons) {
+    actionsRowEl.innerHTML = "";
+    (buttons || []).forEach(btn => {
+      if (!btn.label) return;  // skip entries without a label in the current language
+      const icon = btn.icon || defaultIconForType(btn.type);
+      const a = document.createElement("a");
+      a.className = "cw-chip";
+      a.href = resolveActionHref(btn);
+      if (btn.open_new_tab) {
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+      }
+      a.innerHTML = `<span class="cw-chip-icon">${escapeHtml(icon)}</span><span>${escapeHtml(btn.label)}</span>`;
+      actionsRowEl.appendChild(a);
+    });
   }
 
   /* ── Init: fetch business languages and pick one ───────────── */
@@ -872,6 +959,7 @@
     state.initialized = true;
     applyI18nToUI();
     renderLanguageMenu();
+    loadActionButtons();
   }
 
   /* ── API ────────────────────────────────────────────────────── */

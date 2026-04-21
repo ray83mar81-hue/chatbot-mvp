@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.models import (
+    ActionButton,
+    ActionButtonTranslation,
     AdminUser,
     Business,
     BusinessTranslation,
@@ -17,7 +19,7 @@ from app.models import (
     IntentTranslation,
     Language,
 )
-from app.routers import auth, business, chat, contact, conversations, intents, landing, languages, metrics, superadmin, templates, tenant_admins
+from app.routers import action_buttons, auth, business, chat, contact, conversations, intents, landing, languages, metrics, superadmin, templates, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -44,6 +46,7 @@ app.include_router(superadmin.router)
 app.include_router(tenant_admins.router)
 app.include_router(landing.router)
 app.include_router(templates.router)
+app.include_router(action_buttons.router)
 
 
 @app.on_event("startup")
@@ -298,6 +301,29 @@ def _seed_demo_data():
             ),
         ]
         db.add_all(demo_intents)
+        db.commit()
+
+        # Demo action buttons (chips fijos del widget)
+        demo_buttons_spec = [
+            ("call",     "+34 612 345 678",                  "Llamar",       30),
+            ("map",      "Calle Mayor 42, Centro, Madrid",    "Cómo llegar", 20),
+            ("menu",     "https://cafecentral.com/{lang}/carta", "Ver carta", 10),
+            ("whatsapp", "34612345678",                       "WhatsApp",     5),
+        ]
+        for btype, value, label, priority in demo_buttons_spec:
+            btn = ActionButton(
+                business_id=biz.id,
+                type=btype,
+                value=value,
+                priority=priority,
+            )
+            db.add(btn)
+            db.flush()
+            db.add(ActionButtonTranslation(
+                action_button_id=btn.id,
+                language_code="es",
+                label=label,
+            ))
         db.commit()
     finally:
         db.close()

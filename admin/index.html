@@ -293,6 +293,10 @@
           <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>
           <span>Intents</span>
         </div>
+        <div class="nav-item owner-only" data-section="actions">
+          <svg viewBox="0 0 24 24"><path d="M13.5 2L6 14h5l-1 8 8-12h-5l1-8z"/></svg>
+          <span>Acciones</span>
+        </div>
         <div class="nav-item" data-section="conversations">
           <svg viewBox="0 0 24 24"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
           <span>Conversaciones</span>
@@ -467,6 +471,30 @@
           <table>
             <thead><tr><th>Nombre</th><th>Keywords</th><th>Respuesta</th><th>Prioridad</th><th>Acciones</th></tr></thead>
             <tbody id="intentsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Acciones ───────────────────── -->
+      <div class="section" id="sec-actions">
+        <div class="page-header">
+          <h2>Acciones</h2>
+          <button class="btn btn-primary" onclick="openActionModal()">+ Nuevo botón</button>
+        </div>
+
+        <details style="background:#eff6ff;border-left:4px solid #2563eb;padding:12px 16px;border-radius:6px;margin-bottom:16px;font-size:13px;color:#1e3a8a">
+          <summary style="cursor:pointer;font-weight:600">¿Qué son las acciones?</summary>
+          <div style="margin-top:10px;line-height:1.6">
+            <p style="margin:0 0 8px">Los <strong>botones de acción</strong> (o chips) aparecen fijos en la cabecera del widget, siempre visibles para el cliente. Típicos: <code>📞 Llamar</code>, <code>📍 Cómo llegar</code>, <code>📋 Ver carta</code>, <code>🪑 Reservar</code>, <code>💬 WhatsApp</code>.</p>
+            <p style="margin:0 0 4px">Cada botón tiene un <strong>tipo</strong> (determina el comportamiento) y una <strong>etiqueta por idioma</strong>. Al cambiar el idioma del widget, la etiqueta cambia; el destino se mantiene (o también varía si usas <code>{lang}</code> en la URL).</p>
+            <p style="margin:8px 0 0;color:#475569"><em>Los botones son independientes del chat con IA: el cliente puede usarlos en cualquier momento sin tener que escribir nada.</em></p>
+          </div>
+        </details>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tipo</th><th>Etiquetas</th><th>Destino</th><th>Orden</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="actionsBody"></tbody>
           </table>
         </div>
       </div>
@@ -865,6 +893,62 @@
     </div>
   </div>
 
+  <!-- ═══════ MODAL: Action button ═══════ -->
+  <div class="modal-overlay" id="actionModal">
+    <div class="modal">
+      <h3 id="actionModalTitle">Nuevo botón</h3>
+      <input type="hidden" id="actionId" />
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Tipo</label>
+          <select id="actionType" onchange="updateActionHints()">
+            <option value="call">📞 Llamada</option>
+            <option value="whatsapp">💬 WhatsApp</option>
+            <option value="map">📍 Cómo llegar</option>
+            <option value="menu">📋 Ver carta</option>
+            <option value="url">🔗 Enlace web</option>
+            <option value="custom">⭐ Personalizado</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Orden (mayor = izquierda)</label>
+          <input type="number" id="actionPriority" value="0" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label id="actionValueLabel">Destino</label>
+        <input id="actionValue" placeholder="" />
+        <div id="actionValueHint" style="font-size:12px;color:#6b7280;margin-top:4px"></div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Icono (opcional — sobreescribe el por defecto)</label>
+          <input id="actionIcon" placeholder="" maxlength="10" />
+        </div>
+        <div class="form-group form-row" style="padding-top:28px">
+          <input type="checkbox" id="actionOpenNewTab" checked />
+          <label for="actionOpenNewTab" style="margin:0">Abrir en nueva pestaña</label>
+        </div>
+      </div>
+
+      <div class="form-group form-row">
+        <input type="checkbox" id="actionIsActive" checked />
+        <label for="actionIsActive" style="margin:0">Activo (visible en el widget)</label>
+      </div>
+
+      <div class="modal-section-title">Etiqueta por idioma</div>
+      <div id="actionLabelsContainer" style="display:flex;flex-direction:column;gap:10px"></div>
+
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeActionModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveAction()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════ MODAL: Contact detail ═══════ -->
   <div class="modal-overlay" id="contactModal">
     <div class="modal" style="width:540px">
@@ -1219,13 +1303,23 @@
       }
       badge.style.display = "inline-block";
 
+      // Superadmin on the platform root (not impersonating) should only see
+      // "Plataforma" — the tenant-scoped menus (Dashboard, Intents, etc.) have
+      // no business context and would misfire without a businessId.
+      const isSuperOnPlatform = isSuper && !getImpersonation();
+
       // Superadmin-only nav items
       document.querySelectorAll(".superadmin-only").forEach(el => {
         el.style.display = isSuper ? "" : "none";
       });
-      // Owner-only nav items (hidden for viewers; shown for owners and superadmin-impersonating)
+      // Owner-only nav items (hidden for viewers and for superadmin on the
+      // platform root; shown for owners and superadmin-impersonating).
       document.querySelectorAll(".owner-only").forEach(el => {
-        el.style.display = isViewer ? "none" : "";
+        el.style.display = (isViewer || isSuperOnPlatform) ? "none" : "";
+      });
+      // Tenant-scoped nav items without an explicit role class.
+      document.querySelectorAll('.nav-item[data-section="dashboard"], .nav-item[data-section="conversations"], .nav-item[data-section="contacts"]').forEach(el => {
+        el.style.display = isSuperOnPlatform ? "none" : "";
       });
 
       renderImpersonationBanner();
@@ -1259,7 +1353,7 @@
       localStorage.setItem("impersonating_name", name || "");
       localStorage.setItem("admin_business_id", String(id));
       businessId = id;
-      renderImpersonationBanner();
+      applyRoleToUI();  // re-evaluates sidebar visibility now that we have tenant context
       // Navigate to Dashboard (the client-facing view)
       document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
       const dashItem = document.querySelector('[data-section="dashboard"]');
@@ -1272,7 +1366,7 @@
     function exitImpersonation() {
       localStorage.removeItem("impersonating_business_id");
       localStorage.removeItem("impersonating_name");
-      renderImpersonationBanner();
+      applyRoleToUI();  // re-evaluates sidebar visibility (hides tenant-scoped menus)
       // Send superadmin back to the platform view
       document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
       const platItem = document.querySelector('[data-section="platform"]');
@@ -1461,6 +1555,181 @@
       }
     }
 
+    /* ════════════════════════════════════════════════
+       ACCIONES (action buttons — chips fijos del widget)
+       ════════════════════════════════════════════════ */
+
+    const ACTION_TYPE_DEFAULTS = {
+      call:     { icon: "📞", valueLabel: "Número de teléfono",        valuePlaceholder: "+34 612 345 678", hint: "Número completo con prefijo internacional. El widget generará un enlace tel:" },
+      whatsapp: { icon: "💬", valueLabel: "WhatsApp (E.164 sin +)",    valuePlaceholder: "34612345678",     hint: "Solo dígitos: código país + número. Ej: 34612345678. El widget abrirá wa.me/..." },
+      map:      { icon: "📍", valueLabel: "Dirección o URL de mapa",   valuePlaceholder: "Calle Mayor 42, Madrid", hint: "Dirección en texto (se abre en Google Maps) o URL directa de Maps." },
+      menu:     { icon: "📋", valueLabel: "URL de la carta / menú",    valuePlaceholder: "https://ejemplo.com/carta.pdf", hint: "URL del PDF o página. Usa {lang} para variar por idioma." },
+      url:      { icon: "🔗", valueLabel: "URL del enlace",            valuePlaceholder: "https://ejemplo.com/reservar", hint: "Cualquier URL. Usa {lang} para variar por idioma." },
+      custom:   { icon: "⭐", valueLabel: "URL o destino",              valuePlaceholder: "https://...",      hint: "Elige tú el icono y la etiqueta." },
+    };
+
+    function updateActionHints() {
+      const type = document.getElementById("actionType").value;
+      const def = ACTION_TYPE_DEFAULTS[type] || ACTION_TYPE_DEFAULTS.url;
+      document.getElementById("actionValueLabel").textContent = def.valueLabel;
+      document.getElementById("actionValue").placeholder = def.valuePlaceholder;
+      document.getElementById("actionValueHint").textContent = def.hint;
+      const iconInput = document.getElementById("actionIcon");
+      iconInput.placeholder = def.icon + " (por defecto)";
+    }
+
+    async function loadActions() {
+      const tbody = document.getElementById("actionsBody");
+      if (!tbody) return;
+      try {
+        const res = await fetch(`${API}/business/${businessId}/action-buttons/admin`);
+        if (!res.ok) throw new Error("No se pudieron cargar los botones");
+        const buttons = await res.json();
+        renderActionsTable(buttons);
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:#991b1b;padding:16px">${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function renderActionsTable(buttons) {
+      const tbody = document.getElementById("actionsBody");
+      if (!buttons.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:32px">No hay botones todavía. Pulsa <strong>+ Nuevo botón</strong> para crear el primero.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = buttons.map(b => {
+        const def = ACTION_TYPE_DEFAULTS[b.type] || ACTION_TYPE_DEFAULTS.url;
+        const icon = b.icon || def.icon;
+        const typeLabel = ({ call: "Llamada", whatsapp: "WhatsApp", map: "Mapa", menu: "Carta", url: "Enlace", custom: "Personalizado" }[b.type] || b.type);
+        const labels = (b.translations || [])
+          .filter(t => t.label)
+          .map(t => `<span style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:12px;margin-right:4px">${t.language_code.toUpperCase()}: ${esc(t.label)}</span>`)
+          .join("");
+        const value = b.value || "";
+        const valueShort = value.length > 60 ? value.slice(0, 60) + "…" : value;
+        return `
+          <tr>
+            <td style="white-space:nowrap"><span style="font-size:18px">${icon}</span> ${esc(typeLabel)}</td>
+            <td>${labels || "<em style='color:#9ca3af;font-size:12px'>sin etiqueta</em>"}</td>
+            <td style="color:#6b7280;font-size:12px;font-family:monospace">${esc(valueShort)}</td>
+            <td>${b.priority}</td>
+            <td>${b.is_active ? "<span style='color:#065f46'>✓ activo</span>" : "<span style='color:#9ca3af'>inactivo</span>"}</td>
+            <td>
+              <button class="btn btn-sm" onclick="editAction(${b.id})">Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteAction(${b.id})">Borrar</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    async function openActionModal(data) {
+      await ensureBusinessLangsLoaded();
+      document.getElementById("actionModalTitle").textContent = data ? "Editar botón" : "Nuevo botón";
+      document.getElementById("actionId").value = data ? data.id : "";
+      document.getElementById("actionType").value = data ? data.type : "call";
+      document.getElementById("actionValue").value = data ? (data.value || "") : "";
+      document.getElementById("actionIcon").value = data ? (data.icon || "") : "";
+      document.getElementById("actionPriority").value = data ? data.priority : 0;
+      document.getElementById("actionOpenNewTab").checked = data ? !!data.open_new_tab : true;
+      document.getElementById("actionIsActive").checked = data ? !!data.is_active : true;
+
+      renderActionLabels(data ? (data.translations || []) : []);
+      updateActionHints();
+      document.getElementById("actionModal").classList.add("open");
+    }
+
+    function closeActionModal() {
+      document.getElementById("actionModal").classList.remove("open");
+    }
+
+    function renderActionLabels(existing) {
+      const byLang = {};
+      (existing || []).forEach(t => { byLang[t.language_code] = t.label || ""; });
+      const supported = (bizLangState && bizLangState.supported && bizLangState.supported.length)
+        ? bizLangState.supported
+        : ["es"];
+      const container = document.getElementById("actionLabelsContainer");
+      container.innerHTML = supported.map(code => `
+        <div style="display:flex;align-items:center;gap:12px">
+          <label style="min-width:44px;margin:0;font-weight:600;color:#4b5563">${code.toUpperCase()}</label>
+          <input class="action-label-input" data-lang="${code}" value="${esc(byLang[code] || "")}" placeholder="Etiqueta en ${code.toUpperCase()}" style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px" />
+        </div>
+      `).join("");
+    }
+
+    async function editAction(id) {
+      try {
+        const res = await fetch(`${API}/business/${businessId}/action-buttons/admin`);
+        if (!res.ok) throw new Error("No se pudo cargar el botón");
+        const list = await res.json();
+        const btn = list.find(b => b.id === id);
+        if (!btn) throw new Error("Botón no encontrado");
+        await openActionModal(btn);
+      } catch (e) {
+        alert("Error: " + e.message);
+      }
+    }
+
+    async function saveAction() {
+      const id = document.getElementById("actionId").value;
+      const type = document.getElementById("actionType").value;
+      const value = document.getElementById("actionValue").value.trim();
+      const icon = document.getElementById("actionIcon").value.trim();
+      const priority = parseInt(document.getElementById("actionPriority").value, 10) || 0;
+      const open_new_tab = document.getElementById("actionOpenNewTab").checked;
+      const is_active = document.getElementById("actionIsActive").checked;
+
+      if (!value) { alert("El destino es obligatorio"); return; }
+
+      const translations = Array.from(document.querySelectorAll(".action-label-input"))
+        .map(el => ({ language_code: el.dataset.lang, label: el.value.trim() }))
+        .filter(t => t.label);
+
+      if (!translations.length) {
+        alert("Añade al menos una etiqueta en algún idioma.");
+        return;
+      }
+
+      const body = { type, value, icon, priority, open_new_tab, is_active, translations };
+
+      try {
+        const url = id
+          ? `${API}/business/${businessId}/action-buttons/${id}`
+          : `${API}/business/${businessId}/action-buttons`;
+        const method = id ? "PATCH" : "POST";
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error guardando");
+        }
+        closeActionModal();
+        await loadActions();
+      } catch (e) {
+        alert("Error: " + e.message);
+      }
+    }
+
+    async function deleteAction(id) {
+      if (!confirm("¿Borrar este botón? Esta acción no se puede deshacer.")) return;
+      try {
+        const res = await fetch(`${API}/business/${businessId}/action-buttons/${id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok && res.status !== 204) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error borrando");
+        }
+        await loadActions();
+      } catch (e) {
+        alert("Error: " + e.message);
+      }
+    }
+
     /* ── Incidents (support log) ──────────────────────────────── */
     async function loadIncidents() {
       const block = document.getElementById("incidentsBlock");
@@ -1614,6 +1883,7 @@
         if (section === "platform") loadPlatform();
         if (section === "dashboard") loadDashboard();
         if (section === "intents") loadIntents();
+        if (section === "actions") loadActions();
         if (section === "conversations") loadConversations();
         if (section === "business") loadBusiness();
         if (section === "contacts") loadContacts();
@@ -3354,9 +3624,12 @@ Haz una última pasada mental:
             <p class="md-hint">Formato JSON con pares "día": "hora". Ejemplo: <code>{"lunes": "9-18"}</code>. Aparece en el chat y en la página web.</p>
           </div>
           <div class="form-group">
-            <label>Info extra</label>
-            ${mdEditorHtml(code, "bt-extra", t.extra_info, 5)}
-            <div class="md-hint">Negrita, cursiva, enlaces y listas. Se mostrará formateado en la página web del negocio.</div>
+            <label>Información del negocio · Base de conocimiento</label>
+            ${mdEditorHtml(code, "bt-extra", t.extra_info, 15)}
+            <div class="md-hint">
+              <strong>Campo principal.</strong> Escribe aquí todo lo que quieras que el asistente sepa para responder a los clientes: productos y servicios, precios orientativos, FAQs, políticas (envíos, devoluciones, cancelaciones), normas especiales, eventos, redes sociales, accesibilidad, promociones activas, etc.<br>
+              <em>Sugerencia de estructura:</em> secciones con <code>**Título**</code> en negrita, luego listas con viñetas. Cuanto más completo, mejor responderá la IA. También se muestra formateado en la página web pública del negocio.
+            </div>
           </div>
         `;
         panesEl.appendChild(pane);
