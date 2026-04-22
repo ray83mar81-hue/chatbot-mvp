@@ -169,6 +169,7 @@ Input messages:
             system="You are a professional translator. Reply with valid JSON only.",
             user=prompt,
             max_tokens=4000,
+            business=business,
         )
     except Exception as e:
         raise HTTPException(

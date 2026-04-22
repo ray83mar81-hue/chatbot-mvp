@@ -125,6 +125,7 @@ async def translate_business(
             system="You are a professional translator. Reply with valid JSON only.",
             user=prompt,
             max_tokens=2000,
+            business=business,
         )
     except Exception as e:
         raise TranslationError(f"AI request failed: {type(e).__name__}: {e}") from e

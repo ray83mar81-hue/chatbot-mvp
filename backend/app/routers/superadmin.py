@@ -19,6 +19,7 @@ from app.models.contact_request import ContactRequest
 from app.models.conversation import Conversation
 from app.models.incident import Incident
 from app.models.message import Message
+from app.services.ai_service import compute_cost_usd
 from app.services.chat_limits import tokens_used_this_month
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -68,10 +69,11 @@ class PricingResponse(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────
 
 
-def _compute_cost_usd(tokens_in: int, tokens_out: int) -> float:
-    cost_in = (tokens_in / 1_000_000) * settings.AI_PRICE_INPUT_PER_MILLION
-    cost_out = (tokens_out / 1_000_000) * settings.AI_PRICE_OUTPUT_PER_MILLION
-    return round(cost_in + cost_out, 4)
+def _compute_cost_usd(tokens_in: int, tokens_out: int, business: Business | None = None) -> float:
+    """Thin wrapper over ai_service.compute_cost_usd. Kept for readability in
+    this router; the helper handles per-tenant prices + global fallback.
+    """
+    return compute_cost_usd(tokens_in, tokens_out, business)
 
 
 def _stats_for(business: Business, db: Session) -> BusinessStats:
@@ -138,7 +140,7 @@ def _stats_for(business: Business, db: Session) -> BusinessStats:
         tokens_out=int(tokens_out),
         tokens_this_month=tokens_this_month,
         monthly_token_quota=business.monthly_token_quota,
-        cost_usd=_compute_cost_usd(int(tokens_in), int(tokens_out)),
+        cost_usd=_compute_cost_usd(int(tokens_in), int(tokens_out), business),
         contact_requests_count=contact_count,
         admin_emails=admin_emails,
     )

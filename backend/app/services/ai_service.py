@@ -1,15 +1,17 @@
 """AI service with dual provider support (OpenAI-compatible + Anthropic).
 
-The OpenAI-compatible path works with OpenRouter, OpenAI, Groq, Together, etc.
-and unlocks cheaper models (gpt-4o-mini, gemini-2.5-flash, llama-3.3).
-The Anthropic path is kept for Claude-only deployments.
+Per-tenant configuration (Fase 5): each Business can set its own provider,
+model, API key and optional base_url. When nothing is configured on the
+business, the global env vars (settings.AI_*) are used as a sensible default,
+which keeps existing deployments untouched.
 
-Switch via AI_PROVIDER env var.
+Supported providers, grouped by SDK family:
+  - OpenAI-compatible path (openai.AsyncOpenAI): "openai", "openrouter",
+    "gemini" (via the OpenAI-compatible endpoint), "grok", "custom".
+  - Native Anthropic path (anthropic.AsyncAnthropic): "anthropic".
 
-After the intent refactor, this service is the ONLY source of chat replies:
-the caller passes the active `language` and the business, and the system
-prompt is built from the LOCALIZED business fields (BusinessTranslation row
-for that language, with fallback to the base Business columns when empty).
+The user sees 6 provider options in the admin; under the hood there are only
+two code paths.
 """
 import json
 from typing import AsyncIterator
@@ -35,9 +37,102 @@ LANGUAGE_NAMES = {
 }
 
 
+# ── Per-tenant config resolution ──────────────────────────────────────────
+
+_DEFAULT_BASE_URLS = {
+    "openrouter": "https://openrouter.ai/api/v1",
+    "gemini":     "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "grok":       "https://api.x.ai/v1",
+    # "openai" and "anthropic" use the SDK default (None).
+    # "custom" uses business.ai_base_url.
+}
+
+
+def _resolve_ai_config(business: Business) -> dict:
+    """Effective AI config for this business.
+
+    If the business has no `ai_provider` set, the global env config is used
+    verbatim (provider + model + key + base_url + prices). If a provider is
+    set, we use the business values with targeted fallback per field.
+    """
+    if not business.ai_provider:
+        provider = (settings.AI_PROVIDER or "openai").lower()
+        sdk = "anthropic" if provider == "anthropic" else "openai"
+        return {
+            "provider": provider,
+            "sdk": sdk,
+            "model": settings.AI_MODEL,
+            "api_key": (settings.OPENAI_API_KEY or settings.ANTHROPIC_API_KEY or ""),
+            "base_url": (
+                settings.OPENAI_BASE_URL if sdk == "openai"
+                else settings.ANTHROPIC_BASE_URL
+            ) or None,
+            "input_price_per_million": settings.AI_PRICE_INPUT_PER_MILLION,
+            "output_price_per_million": settings.AI_PRICE_OUTPUT_PER_MILLION,
+        }
+
+    provider = business.ai_provider.lower()
+    sdk = "anthropic" if provider == "anthropic" else "openai"
+
+    if provider == "custom":
+        base_url = business.ai_base_url or None
+    elif provider == "openai":
+        base_url = settings.OPENAI_BASE_URL or None
+    elif provider == "anthropic":
+        base_url = settings.ANTHROPIC_BASE_URL or None
+    else:
+        base_url = _DEFAULT_BASE_URLS.get(provider)
+
+    api_key = business.ai_api_key
+    if not api_key:
+        # Fall back to the env var that matches THIS provider's SDK family —
+        # never cross-wire (passing OPENAI_API_KEY to Anthropic would 401).
+        api_key = (
+            settings.ANTHROPIC_API_KEY if sdk == "anthropic"
+            else settings.OPENAI_API_KEY
+        )
+
+    return {
+        "provider": provider,
+        "sdk": sdk,
+        "model": business.ai_model or settings.AI_MODEL,
+        "api_key": api_key or "",
+        "base_url": base_url,
+        "input_price_per_million": (
+            business.ai_input_price_per_million
+            if business.ai_input_price_per_million is not None
+            else settings.AI_PRICE_INPUT_PER_MILLION
+        ),
+        "output_price_per_million": (
+            business.ai_output_price_per_million
+            if business.ai_output_price_per_million is not None
+            else settings.AI_PRICE_OUTPUT_PER_MILLION
+        ),
+    }
+
+
+def compute_cost_usd(tokens_in: int, tokens_out: int, business: Business | None = None) -> float:
+    """Unit-aware cost calculator. Uses the business' per-million prices if
+    configured; otherwise falls back to the global env defaults.
+    """
+    if business is not None:
+        cfg = _resolve_ai_config(business)
+        input_p = cfg["input_price_per_million"]
+        output_p = cfg["output_price_per_million"]
+    else:
+        input_p = settings.AI_PRICE_INPUT_PER_MILLION
+        output_p = settings.AI_PRICE_OUTPUT_PER_MILLION
+    cost_in = (tokens_in / 1_000_000) * input_p
+    cost_out = (tokens_out / 1_000_000) * output_p
+    return round(cost_in + cost_out, 4)
+
+
+# ── Localized business fields (used by the system prompt) ─────────────────
+
+
 def _get_localized_fields(db: Session, business: Business, language: str) -> dict:
-    """Resolve the business fields in the target `language`, falling back to
-    the base Business columns per field when a translated value is empty.
+    """Resolve business fields in `language`, falling back to the base Business
+    columns per field when a translated value is empty.
     """
     translation = (
         db.query(BusinessTranslation)
@@ -58,14 +153,12 @@ def _get_localized_fields(db: Session, business: Business, language: str) -> dic
         "address":     pick(translation.address     if translation else None, business.address),
         "schedule":    pick(translation.schedule    if translation else None, business.schedule),
         "extra_info":  pick(translation.extra_info  if translation else None, business.extra_info),
-        # Non-translatable
         "phone": business.phone or "",
         "email": business.email or "",
     }
 
 
 def _build_system_prompt(fields: dict, language: str) -> str:
-    """Compose the system prompt from pre-resolved localized fields."""
     schedule = fields.get("schedule") or "{}"
     try:
         schedule_formatted = json.dumps(json.loads(schedule), ensure_ascii=False, indent=2)
@@ -103,62 +196,28 @@ def _build_messages(conversation_history: list[Message], user_message: str) -> l
     return messages
 
 
-# ── Clients ───────────────────────────────────────────────────────────────
-
-def _use_openai() -> bool:
-    return (settings.AI_PROVIDER or "openai").lower() == "openai"
+# ── Client factories (take explicit credentials) ──────────────────────────
 
 
-def _get_openai_client() -> openai.AsyncOpenAI:
-    return openai.AsyncOpenAI(
-        api_key=settings.OPENAI_API_KEY or settings.ANTHROPIC_API_KEY,
-        base_url=settings.OPENAI_BASE_URL or None,
-    )
+def _make_openai_client(api_key: str, base_url: str | None) -> openai.AsyncOpenAI:
+    kwargs: dict = {"api_key": api_key or ""}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return openai.AsyncOpenAI(**kwargs)
 
 
-def _get_anthropic_client() -> anthropic.AsyncAnthropic:
-    kwargs = {"api_key": settings.ANTHROPIC_API_KEY}
-    if settings.ANTHROPIC_BASE_URL:
-        kwargs["base_url"] = settings.ANTHROPIC_BASE_URL
+def _make_anthropic_client(api_key: str, base_url: str | None) -> anthropic.AsyncAnthropic:
+    kwargs: dict = {"api_key": api_key or ""}
+    if base_url:
+        kwargs["base_url"] = base_url
     return anthropic.AsyncAnthropic(**kwargs)
-
-
-def _get_client():
-    """Legacy export used by other services for simple JSON tasks."""
-    if _use_openai():
-        return _get_openai_client()
-    return _get_anthropic_client()
 
 
 # ── High-level calls ──────────────────────────────────────────────────────
 
-async def _openai_chat(system: str, messages: list[dict], max_tokens: int = 500) -> tuple[str, int | None, int | None]:
-    client = _get_openai_client()
-    resp = await client.chat.completions.create(
-        model=settings.AI_MODEL,
-        max_tokens=max_tokens,
-        messages=[{"role": "system", "content": system}] + messages,
-    )
-    text = resp.choices[0].message.content or ""
-    usage = resp.usage
-    return text, (usage.prompt_tokens if usage else None), (usage.completion_tokens if usage else None)
-
-
-async def _anthropic_chat(system: str, messages: list[dict], max_tokens: int = 500) -> tuple[str, int | None, int | None]:
-    client = _get_anthropic_client()
-    resp = await client.messages.create(
-        model=settings.AI_MODEL,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
-    )
-    text = resp.content[0].text
-    usage = getattr(resp, "usage", None)
-    return text, (usage.input_tokens if usage else None), (usage.output_tokens if usage else None)
-
 
 class AIError(Exception):
-    """Raised when the AI provider fails. Callers handle fallback + logging."""
+    """Raised when the AI provider fails. Callers log + fall back."""
 
 
 def ai_fallback_message(business: Business) -> str:
@@ -168,22 +227,47 @@ def ai_fallback_message(business: Business) -> str:
     )
 
 
+async def _openai_chat(config: dict, system: str, messages: list[dict], max_tokens: int = 500):
+    client = _make_openai_client(config["api_key"], config["base_url"])
+    resp = await client.chat.completions.create(
+        model=config["model"],
+        max_tokens=max_tokens,
+        messages=[{"role": "system", "content": system}] + messages,
+    )
+    text = resp.choices[0].message.content or ""
+    usage = resp.usage
+    return text, (usage.prompt_tokens if usage else None), (usage.completion_tokens if usage else None)
+
+
+async def _anthropic_chat(config: dict, system: str, messages: list[dict], max_tokens: int = 500):
+    client = _make_anthropic_client(config["api_key"], config["base_url"])
+    resp = await client.messages.create(
+        model=config["model"],
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+    )
+    text = resp.content[0].text
+    usage = getattr(resp, "usage", None)
+    return text, (usage.input_tokens if usage else None), (usage.output_tokens if usage else None)
+
+
 async def generate_ai_response(
     business: Business,
     db: Session,
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
-) -> tuple[str, int | None, int | None]:
-    """Generate a reply in `language`. Returns (text, tokens_in, tokens_out)."""
+):
     fields = _get_localized_fields(db, business, language)
     system_prompt = _build_system_prompt(fields, language)
     messages = _build_messages(conversation_history, user_message)
+    config = _resolve_ai_config(business)
 
     try:
-        if _use_openai():
-            return await _openai_chat(system_prompt, messages)
-        return await _anthropic_chat(system_prompt, messages)
+        if config["sdk"] == "openai":
+            return await _openai_chat(config, system_prompt, messages)
+        return await _anthropic_chat(config, system_prompt, messages)
     except Exception as e:
         raise AIError(f"{type(e).__name__}: {e}") from e
 
@@ -196,16 +280,16 @@ async def stream_ai_response(
     language: str = "es",
     usage_out: dict | None = None,
 ) -> AsyncIterator[str]:
-    """Yield text chunks. Populates usage_out with tokens if given."""
     fields = _get_localized_fields(db, business, language)
     system_prompt = _build_system_prompt(fields, language)
     messages = _build_messages(conversation_history, user_message)
+    config = _resolve_ai_config(business)
 
     try:
-        if _use_openai():
-            client = _get_openai_client()
+        if config["sdk"] == "openai":
+            client = _make_openai_client(config["api_key"], config["base_url"])
             stream = await client.chat.completions.create(
-                model=settings.AI_MODEL,
+                model=config["model"],
                 max_tokens=500,
                 messages=[{"role": "system", "content": system_prompt}] + messages,
                 stream=True,
@@ -220,9 +304,9 @@ async def stream_ai_response(
                     usage_out["tokens_in"] = chunk.usage.prompt_tokens
                     usage_out["tokens_out"] = chunk.usage.completion_tokens
         else:
-            client = _get_anthropic_client()
+            client = _make_anthropic_client(config["api_key"], config["base_url"])
             async with client.messages.stream(
-                model=settings.AI_MODEL,
+                model=config["model"],
                 max_tokens=500,
                 system=system_prompt,
                 messages=messages,
@@ -242,14 +326,32 @@ async def stream_ai_response(
         yield ai_fallback_message(business)
 
 
-# ── JSON-only helper used by translation services ────────────────────────
+# ── JSON helper used by translation services ──────────────────────────────
 
-async def chat_json(system: str, user: str, max_tokens: int = 2000) -> str:
-    """One-shot call for translation services that need raw text back."""
-    if _use_openai():
-        client = _get_openai_client()
+
+async def chat_json(
+    system: str,
+    user: str,
+    max_tokens: int = 2000,
+    business: Business | None = None,
+) -> str:
+    """One-shot JSON-returning call. If a business is provided, uses its
+    configured AI; otherwise uses the global env.
+    """
+    if business is not None:
+        cfg = _resolve_ai_config(business)
+    else:
+        cfg = {
+            "sdk": "anthropic" if (settings.AI_PROVIDER or "openai").lower() == "anthropic" else "openai",
+            "model": settings.AI_MODEL,
+            "api_key": settings.OPENAI_API_KEY or settings.ANTHROPIC_API_KEY or "",
+            "base_url": settings.OPENAI_BASE_URL or settings.ANTHROPIC_BASE_URL or None,
+        }
+
+    if cfg["sdk"] == "openai":
+        client = _make_openai_client(cfg["api_key"], cfg["base_url"])
         resp = await client.chat.completions.create(
-            model=settings.AI_MODEL,
+            model=cfg["model"],
             max_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": system},
@@ -257,9 +359,9 @@ async def chat_json(system: str, user: str, max_tokens: int = 2000) -> str:
             ],
         )
         return resp.choices[0].message.content or ""
-    client = _get_anthropic_client()
+    client = _make_anthropic_client(cfg["api_key"], cfg["base_url"])
     resp = await client.messages.create(
-        model=settings.AI_MODEL,
+        model=cfg["model"],
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],

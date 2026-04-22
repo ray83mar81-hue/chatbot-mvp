@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
 from app.deps import assert_business_access, get_current_user
 from app.models.admin_user import AdminUser
@@ -13,6 +12,7 @@ from app.models.business import Business
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.schemas.metrics import DailyCount, MetricsResponse
+from app.services.ai_service import compute_cost_usd
 from app.services.chat_limits import tokens_used_this_month
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
@@ -65,11 +65,7 @@ def get_usage(
         )
         .scalar()
     ) or 0
-    cost = round(
-        (int(tokens_in_total) / 1_000_000) * settings.AI_PRICE_INPUT_PER_MILLION
-        + (int(tokens_out_total) / 1_000_000) * settings.AI_PRICE_OUTPUT_PER_MILLION,
-        4,
-    )
+    cost = compute_cost_usd(int(tokens_in_total), int(tokens_out_total), business)
 
     ai_msgs = (
         db.query(func.count(Message.id))

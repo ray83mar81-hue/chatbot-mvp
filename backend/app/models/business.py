@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -37,6 +37,17 @@ class Business(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     # Monthly token cap for this tenant (NULL = unlimited). Superadmin sets this.
     monthly_token_quota = Column(Integer, nullable=True)
+
+    # Per-tenant AI configuration (superadmin-managed by default; tenant owners
+    # may override from their admin if they bring their own API key).
+    # All NULL → fall back to global settings.AI_* env vars (so existing
+    # deployments keep working untouched).
+    ai_provider = Column(String(20), nullable=True)   # openrouter|openai|anthropic|gemini|grok|custom
+    ai_model = Column(String(200), nullable=True)     # model id string
+    ai_api_key = Column(String(500), nullable=True)   # plaintext in DB, masked on GET
+    ai_base_url = Column(String(500), nullable=True)  # only used when provider=custom
+    ai_input_price_per_million = Column(Float, nullable=True)
+    ai_output_price_per_million = Column(Float, nullable=True)
 
     # Public landing page (for clients without their own website).
     # slug is URL-safe identifier, must be unique when set. Served at /negocio/{slug}.

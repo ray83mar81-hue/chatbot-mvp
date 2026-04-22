@@ -16,7 +16,7 @@ from app.models import (
     ContactRequest,
     Language,
 )
-from app.routers import action_buttons, auth, business, chat, contact, conversations, landing, languages, metrics, superadmin, tenant_admins
+from app.routers import action_buttons, ai_config, auth, business, chat, contact, conversations, landing, languages, metrics, superadmin, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -42,6 +42,7 @@ app.include_router(superadmin.router)
 app.include_router(tenant_admins.router)
 app.include_router(landing.router)
 app.include_router(action_buttons.router)
+app.include_router(ai_config.router)
 
 
 @app.on_event("startup")
@@ -94,6 +95,13 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "landing_enabled", "BOOLEAN DEFAULT FALSE NOT NULL"),
     ("businesses", "landing_theme", "VARCHAR(20) DEFAULT 'clean' NOT NULL"),
     ("businesses", "logo_url", "VARCHAR(500) DEFAULT ''"),
+    # Per-tenant AI configuration (Fase 5). All NULL → global env fallback.
+    ("businesses", "ai_provider", "VARCHAR(20)"),
+    ("businesses", "ai_model", "VARCHAR(200)"),
+    ("businesses", "ai_api_key", "VARCHAR(500)"),
+    ("businesses", "ai_base_url", "VARCHAR(500)"),
+    ("businesses", "ai_input_price_per_million", "FLOAT"),
+    ("businesses", "ai_output_price_per_million", "FLOAT"),
 ]
 
 
