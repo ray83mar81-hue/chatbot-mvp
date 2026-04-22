@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -15,11 +14,9 @@ from app.models import (
     Business,
     BusinessTranslation,
     ContactRequest,
-    Intent,
-    IntentTranslation,
     Language,
 )
-from app.routers import action_buttons, auth, business, chat, contact, conversations, intents, landing, languages, metrics, superadmin, templates, tenant_admins
+from app.routers import action_buttons, auth, business, chat, contact, conversations, landing, languages, metrics, superadmin, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -36,7 +33,6 @@ app.add_middleware(
 # Register routers
 app.include_router(chat.router)
 app.include_router(business.router)
-app.include_router(intents.router)
 app.include_router(conversations.router)
 app.include_router(metrics.router)
 app.include_router(auth.router)
@@ -45,7 +41,6 @@ app.include_router(contact.router)
 app.include_router(superadmin.router)
 app.include_router(tenant_admins.router)
 app.include_router(landing.router)
-app.include_router(templates.router)
 app.include_router(action_buttons.router)
 
 
@@ -56,9 +51,7 @@ def on_startup():
     _migrate_schema()
     _seed_languages()
     _seed_demo_data()
-    _backfill_intent_translations()
     _backfill_business_translations()
-    _migrate_intents_to_extra_info()
     _promote_superadmin_by_email()
 
 
@@ -69,8 +62,6 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "supported_languages", 'TEXT DEFAULT \'["es"]\''),
     ("businesses", "default_language", "VARCHAR(5) DEFAULT 'es'"),
     ("businesses", "welcome_messages", "TEXT DEFAULT '{}'"),
-    ("intents", "button_url", "VARCHAR(500) DEFAULT ''"),
-    ("intents", "button_open_new_tab", "BOOLEAN DEFAULT 1"),
     # Block 9: contact form
     ("businesses", "contact_form_enabled", "BOOLEAN DEFAULT 0"),
     ("businesses", "contact_notification_email", "VARCHAR(255) DEFAULT ''"),
@@ -107,7 +98,7 @@ SCHEMA_MIGRATIONS = [
 
 
 def _migrate_schema():
-    """Add missing columns and apply constraint migrations. Idempotent."""
+    """Add missing columns, drop obsolete intent tables/columns. Idempotent."""
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
@@ -122,23 +113,50 @@ def _migrate_schema():
                 continue
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
 
-        # Constraint migrations (idempotent — check before altering)
+        # admin_users.business_id nullability (for superadmin rows)
         if "admin_users" in existing_tables:
             cols = {c["name"]: c for c in insp.get_columns("admin_users")}
             biz = cols.get("business_id")
             if biz is not None and not biz.get("nullable", True):
-                # Drop NOT NULL so superadmins can exist without a business
                 try:
                     conn.execute(text(
                         "ALTER TABLE admin_users ALTER COLUMN business_id DROP NOT NULL"
                     ))
                 except Exception:
-                    # SQLite (used in tests) doesn't support ALTER COLUMN — and
-                    # doesn't enforce nullable constraints anyway. Safe to skip.
+                    # SQLite (tests) doesn't support ALTER COLUMN; safe to skip.
+                    pass
+
+        # One-shot cleanup of the legacy intent system. After the AI-first
+        # refactor, intent responses have already been folded into
+        # business_translations.extra_info (commit 1 of Fase 3). These drops
+        # remove the dead tables/columns so they don't show up in diagnostics.
+        if "messages" in existing_tables:
+            msg_cols = {c["name"] for c in insp.get_columns("messages")}
+            if "intent_matched_id" in msg_cols:
+                try:
+                    # Postgres: needs CASCADE to drop the FK constraint.
+                    conn.execute(text(
+                        "ALTER TABLE messages DROP COLUMN intent_matched_id CASCADE"
+                    ))
+                except Exception:
+                    # SQLite path: DROP COLUMN is supported from 3.35 but
+                    # without CASCADE. Try without.
+                    try:
+                        conn.execute(text("ALTER TABLE messages DROP COLUMN intent_matched_id"))
+                    except Exception:
+                        pass
+
+        for legacy_table in ("intent_translations", "intents"):
+            try:
+                conn.execute(text(f"DROP TABLE IF EXISTS {legacy_table} CASCADE"))
+            except Exception:
+                try:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {legacy_table}"))
+                except Exception:
                     pass
 
 
-# Default catalog of supported languages. The superadmin will manage this in the future.
+# Default catalog of supported languages.
 DEFAULT_LANGUAGES = [
     {"code": "es", "name": "Spanish",    "native_name": "Español",    "flag_emoji": "🇪🇸", "sort_order": 1},
     {"code": "en", "name": "English",    "native_name": "English",    "flag_emoji": "🇬🇧", "sort_order": 2},
@@ -163,54 +181,8 @@ def _seed_languages():
         db.close()
 
 
-def _backfill_intent_translations():
-    """
-    Ensure every Intent has a translation in its business default language.
-    If missing, create one from the legacy keywords/response fields on the
-    Intent itself. Idempotent — safe to re-run on every startup.
-
-    This catches two cases:
-    1. Intents created before the i18n migration (no translations at all).
-    2. Intents whose default-lang row was never created (e.g. they were
-       AI-translated to other languages but the source row was somehow lost).
-    """
-    db = SessionLocal()
-    try:
-        intents = db.query(Intent).all()
-        for intent in intents:
-            business = (
-                db.query(Business).filter(Business.id == intent.business_id).first()
-            )
-            default_lang = (business.default_language if business else None) or "es"
-
-            existing = (
-                db.query(IntentTranslation)
-                .filter(
-                    IntentTranslation.intent_id == intent.id,
-                    IntentTranslation.language_code == default_lang,
-                )
-                .first()
-            )
-            if existing:
-                continue
-
-            translation = IntentTranslation(
-                intent_id=intent.id,
-                language_code=default_lang,
-                keywords=intent.keywords or "[]",
-                response=intent.response or "",
-                button_label="",
-                auto_translated=False,
-                needs_review=False,
-            )
-            db.add(translation)
-        db.commit()
-    finally:
-        db.close()
-
-
 def _seed_demo_data():
-    """Insert demo business + intents if the DB is fresh."""
+    """Insert the demo business + its action buttons on a fresh DB."""
     db = SessionLocal()
     try:
         if db.query(Business).first():
@@ -231,85 +203,27 @@ def _seed_demo_data():
             address="Calle Mayor 42, Centro",
             phone="+34 612 345 678",
             email="hola@cafecentral.com",
-            extra_info="WiFi gratis. Aceptamos reservas para grupos de más de 6 personas. "
-            "Tenemos opciones veganas y sin gluten. Parking público a 2 minutos.",
+            extra_info=(
+                "**Servicios:**\n"
+                "- WiFi gratis (pide la contraseña en barra)\n"
+                "- Terraza climatizada\n"
+                "- Reservas para grupos de más de 6 personas (por teléfono o email)\n"
+                "- Opciones veganas y sin gluten\n"
+                "- Parking público a 2 minutos\n\n"
+                "**Precios orientativos:** café espresso 1.80€, café con leche 2.20€, "
+                "tostada con tomate 3.50€, brunch completo (fines de semana) 14.90€."
+            ),
         )
         db.add(biz)
         db.commit()
         db.refresh(biz)
 
-        demo_intents = [
-            Intent(
-                business_id=biz.id,
-                name="horarios",
-                keywords=json.dumps(
-                    ["horario", "hora", "abierto", "abren", "cierran", "horarios"],
-                    ensure_ascii=False,
-                ),
-                response="Nuestros horarios son:\n"
-                "• Lunes a viernes: 7:00 - 20:00\n"
-                "• Sábados: 8:00 - 21:00\n"
-                "• Domingos: 9:00 - 15:00",
-                priority=10,
-            ),
-            Intent(
-                business_id=biz.id,
-                name="ubicacion",
-                keywords=json.dumps(
-                    ["donde", "ubicacion", "direccion", "llegar", "mapa", "dirección", "ubicación"],
-                    ensure_ascii=False,
-                ),
-                response="Estamos en Calle Mayor 42, Centro. "
-                "Hay parking público a 2 minutos caminando.",
-                priority=10,
-            ),
-            Intent(
-                business_id=biz.id,
-                name="precios",
-                keywords=json.dumps(
-                    ["precio", "precios", "cuesta", "vale", "carta", "menu", "menú"],
-                    ensure_ascii=False,
-                ),
-                response="Nuestros precios orientativos:\n"
-                "• Café espresso: 1.80€\n"
-                "• Café con leche: 2.20€\n"
-                "• Tostada con tomate: 3.50€\n"
-                "• Brunch completo (fines de semana): 14.90€\n"
-                "Consulta la carta completa en el local o pídela por email.",
-                priority=10,
-            ),
-            Intent(
-                business_id=biz.id,
-                name="wifi",
-                keywords=json.dumps(
-                    ["wifi", "internet", "contraseña", "clave"],
-                    ensure_ascii=False,
-                ),
-                response="Sí, tenemos WiFi gratis. "
-                "Pide la contraseña en barra cuando hagas tu pedido.",
-                priority=5,
-            ),
-            Intent(
-                business_id=biz.id,
-                name="reservas",
-                keywords=json.dumps(
-                    ["reservar", "reserva", "reservas", "grupo", "grupos", "mesa"],
-                    ensure_ascii=False,
-                ),
-                response="Aceptamos reservas para grupos de más de 6 personas. "
-                "Puedes reservar llamando al +34 612 345 678 o enviando un email a hola@cafecentral.com.",
-                priority=5,
-            ),
-        ]
-        db.add_all(demo_intents)
-        db.commit()
-
         # Demo action buttons (chips fijos del widget)
         demo_buttons_spec = [
-            ("call",     "+34 612 345 678",                  "Llamar",       30),
-            ("map",      "Calle Mayor 42, Centro, Madrid",    "Cómo llegar", 20),
-            ("menu",     "https://cafecentral.com/{lang}/carta", "Ver carta", 10),
-            ("whatsapp", "34612345678",                       "WhatsApp",     5),
+            ("call",     "+34 612 345 678",                        "Llamar",       30),
+            ("map",      "Calle Mayor 42, Centro, Madrid",         "Cómo llegar",  20),
+            ("menu",     "https://cafecentral.com/{lang}/carta",   "Ver carta",    10),
+            ("whatsapp", "34612345678",                             "WhatsApp",      5),
         ]
         for btype, value, label, priority in demo_buttons_spec:
             btn = ActionButton(
@@ -331,12 +245,11 @@ def _seed_demo_data():
 
 
 def _promote_superadmin_by_email():
-    """If SUPERADMIN_EMAIL is configured, promote that user to superadmin
-    (and clear business_id). Idempotent — safe to run on every startup.
+    """If SUPERADMIN_EMAIL is configured, promote that user to superadmin.
+    Idempotent — safe to run on every startup.
     """
     if not settings.SUPERADMIN_EMAIL:
         return
-    from app.models.admin_user import AdminUser
     db = SessionLocal()
     try:
         user = (
@@ -348,97 +261,6 @@ def _promote_superadmin_by_email():
             user.role = "superadmin"
             user.business_id = None
             db.commit()
-    finally:
-        db.close()
-
-
-# Marker placed at the top of the migrated block. Used for idempotency:
-# if the marker is already present in a business_translations.extra_info,
-# the migration skips that row. Safe to leave in place — it's an HTML
-# comment so it doesn't render in the landing page markdown.
-# Will be removed together with the intents tables in Fase 3 commit 2.
-INTENT_MIGRATION_MARKER = "<!-- intents-migrated -->"
-
-
-def _migrate_intents_to_extra_info():
-    """Fold each business's active Intent responses into business_translations.extra_info.
-
-    Idempotent per (business_id, language_code) via the marker. Does NOT touch
-    Intent / IntentTranslation rows — those stay intact while the migration
-    output is validated. Removal happens in a follow-up commit.
-
-    Shape of the appended block:
-
-        <!-- intents-migrated -->
-        **Preguntas frecuentes (migradas de intents):**
-
-        ## {intent.name}
-        {localized response}
-        Enlace: [{button_label}]({button_url})
-
-        ## {other intent}
-        ...
-    """
-    db = SessionLocal()
-    try:
-        businesses = db.query(Business).all()
-        for biz in businesses:
-            intents = (
-                db.query(Intent)
-                .filter(Intent.business_id == biz.id, Intent.is_active.is_(True))
-                .order_by(Intent.priority.desc(), Intent.id)
-                .all()
-            )
-            if not intents:
-                continue
-
-            # index: intent_id → {lang_code: IntentTranslation}
-            trans_by_intent_lang: dict[int, dict[str, IntentTranslation]] = {}
-            for intent in intents:
-                trans_by_intent_lang[intent.id] = {
-                    tr.language_code: tr for tr in intent.translations
-                }
-
-            biz_trs = (
-                db.query(BusinessTranslation)
-                .filter(BusinessTranslation.business_id == biz.id)
-                .all()
-            )
-
-            for biz_tr in biz_trs:
-                if INTENT_MIGRATION_MARKER in (biz_tr.extra_info or ""):
-                    continue  # already migrated for this (biz, lang)
-
-                lang = biz_tr.language_code
-                blocks = []
-                for intent in intents:
-                    tr = trans_by_intent_lang.get(intent.id, {}).get(lang)
-                    if not tr:
-                        continue  # intent has no translation in this language → skip
-                    response = (tr.response or "").strip()
-                    if not response:
-                        continue
-                    lines = [f"## {intent.name}", response]
-                    if intent.button_url:
-                        label = (tr.button_label or intent.name).strip()
-                        url = intent.button_url.replace("{lang}", lang)
-                        lines.append(f"Enlace: [{label}]({url})")
-                    blocks.append("\n".join(lines))
-
-                if not blocks:
-                    continue
-
-                existing = (biz_tr.extra_info or "").rstrip()
-                separator = "\n\n---\n\n" if existing else ""
-                header = f"{INTENT_MIGRATION_MARKER}\n**Preguntas frecuentes (migradas de intents):**"
-                body = "\n\n".join(blocks)
-                biz_tr.extra_info = f"{existing}{separator}{header}\n\n{body}"
-                print(
-                    f"[intent-migration] business {biz.id} ({biz.name}), "
-                    f"lang {lang}: {len(blocks)} intent(s) folded into extra_info"
-                )
-
-        db.commit()
     finally:
         db.close()
 
@@ -480,7 +302,6 @@ def _backfill_business_translations():
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # chatbot-mvp/
 WIDGET_DIR = PROJECT_ROOT / "widget"
 ADMIN_DIR = PROJECT_ROOT / "admin"
-
 FLAGS_DIR = PROJECT_ROOT / "flags"
 
 if WIDGET_DIR.exists():

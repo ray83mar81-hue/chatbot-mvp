@@ -6,24 +6,17 @@ from pydantic import BaseModel
 class ChatRequest(BaseModel):
     message: str
     session_id: str
-    business_id: int = 1  # Default for MVP single-business
-    language: str | None = None  # ISO code; if None, falls back to business default
-
-
-class ChatButton(BaseModel):
-    """Optional CTA button attached to an intent response."""
-    label: str
-    url: str
-    open_new_tab: bool = True
+    business_id: int = 1
+    language: str | None = None  # ISO code; falls back to business default
 
 
 class ChatResponse(BaseModel):
     response: str
-    source: str  # "intent" | "ai"
+    # "ai" for normal replies, "fallback" when the gate short-circuits or the
+    # provider errored and a canned message was served.
+    source: str
     session_id: str
     language: str
-    intent_name: str | None = None
-    button: ChatButton | None = None
 
 
 class MessageResponse(BaseModel):
@@ -61,13 +54,13 @@ class ConversationListResponse(BaseModel):
 
 
 class TranslateConversationRequest(BaseModel):
-    target_language: str | None = None  # defaults to business.default_language
+    target_language: str | None = None
 
 
 class TranslatedMessage(BaseModel):
     id: int
     role: str
-    content: str  # translated
+    content: str
     source: str | None = None
     created_at: datetime
 

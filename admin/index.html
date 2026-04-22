@@ -289,10 +289,6 @@
           <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
           <span>Dashboard</span>
         </div>
-        <div class="nav-item owner-only" data-section="intents">
-          <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>
-          <span>Intents</span>
-        </div>
         <div class="nav-item owner-only" data-section="actions">
           <svg viewBox="0 0 24 24"><path d="M13.5 2L6 14h5l-1 8 8-12h-5l1-8z"/></svg>
           <span>Acciones</span>
@@ -395,84 +391,32 @@
         <details style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin-bottom:24px;font-size:13px;color:#14532d">
           <summary style="cursor:pointer;font-weight:600">¿Cómo funciona tu plan? Qué consume y qué no</summary>
           <div style="margin-top:12px;line-height:1.7">
-            <p style="margin:0 0 10px"><strong>Tu plan te permite usar el chatbot con IA de forma ilimitada según la cuota mensual acordada.</strong> Lo que consume esa cuota son las respuestas generadas por IA, no las acciones de configuración.</p>
+            <p style="margin:0 0 10px"><strong>Tu plan te permite usar el chatbot con IA de forma ilimitada según la cuota mensual acordada.</strong> Lo que consume la cuota son las respuestas generadas por IA, no las acciones de configuración.</p>
 
             <p style="margin:12px 0 4px;font-weight:600;color:#166534">✅ SÍ consume</p>
             <ul style="margin:4px 0 0 20px">
-              <li>Cada respuesta que genera la IA cuando la pregunta del usuario <strong>no coincide con ningún intent</strong>. El bot improvisa usando los datos del negocio.</li>
-              <li>Traducir intents o datos del negocio con el botón "Traducir con IA" (una sola vez por campo/idioma).</li>
+              <li>Cada respuesta de chat generada por la IA (input + output se miden en tokens).</li>
+              <li>Traducir los datos del negocio a otros idiomas con el botón "Traducir con IA" (una sola vez por campo/idioma).</li>
               <li>Traducir el histórico de una conversación concreta a otro idioma (bajo demanda).</li>
             </ul>
 
             <p style="margin:16px 0 4px;font-weight:600;color:#991b1b">❌ NO consume</p>
             <ul style="margin:4px 0 0 20px">
-              <li>Respuestas servidas por un intent configurado (son instantáneas y gratis).</li>
+              <li>Click en los botones de acción (chips) del widget — llamar, mapa, carta, WhatsApp… son enlaces directos.</li>
               <li>Cambiar idioma en el widget, abrir/cerrar el chat, cargar la página.</li>
-              <li>Navegación por el admin, editar intents, guardar cambios, subir un logo.</li>
+              <li>Navegación por el admin, editar configuración, guardar cambios, subir un logo.</li>
               <li>Tener varios idiomas activados — lo que cuenta es cuántas preguntas se respondan por IA, no el número de idiomas soportados.</li>
             </ul>
 
             <p style="margin:16px 0 4px;font-weight:600;color:#1e40af">💡 Cómo consumir menos</p>
             <ul style="margin:4px 0 0 20px">
-              <li><strong>Crea intents</strong> para tus preguntas más frecuentes (horario, ubicación, precios, reservas, etc.). Las respuestas son instantáneas y no consumen.</li>
-              <li><strong>Tradúcelos con IA</strong> una vez a cada idioma soportado. Después todas las consultas en ese idioma se sirven gratis desde tu catálogo.</li>
-              <li>El panel de arriba te muestra tu <strong>% de ahorro con intents</strong>: cuanto más alto, más eficiente es tu bot.</li>
+              <li><strong>Rellena bien "Información del negocio"</strong> en la pestaña Negocio: horarios, servicios, FAQs, políticas. Cuanto más completo, menos preguntas quedan sin responder.</li>
+              <li><strong>Añade botones de acción</strong> para las 3-5 operaciones frecuentes (llamar, reservar, ver carta, cómo llegar). El usuario las dispara sin pasar por el chat.</li>
             </ul>
 
-            <p style="margin:16px 0 0;color:#475569"><em>Si superas la cuota mensual antes de fin de mes, el chatbot seguirá respondiendo con intents, pero pausará las respuestas con IA hasta el siguiente ciclo o hasta que amplíes el plan.</em></p>
+            <p style="margin:16px 0 0;color:#475569"><em>Si superas la cuota mensual antes de fin de mes, el chat se pausará hasta el siguiente ciclo o hasta que amplíes el plan. Los botones de acción seguirán funcionando.</em></p>
           </div>
         </details>
-
-        <div class="page-header"><h2 style="font-size:18px">Intents más usados</h2></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Intent</th><th>Usos</th></tr></thead>
-            <tbody id="topIntentsBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ── Intents ────────────────────── -->
-      <div class="section" id="sec-intents">
-        <div class="page-header">
-          <h2>Intents</h2>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn" style="background:#ede9fe;color:#5b21b6" onclick="openAiPromptModal()" title="Genera intents a partir de la info del negocio usando ChatGPT/Claude">🪄 Generar con IA externa</button>
-            <button class="btn" style="background:#fef3c7;color:#92400e" onclick="openTemplatesModal()">✨ Plantillas por sector</button>
-            <button class="btn" id="translateAllIntentsBtn" style="background:#dbeafe;color:#1e40af" onclick="translateAllIntents()">Traducir todos con IA</button>
-            <button class="btn" style="background:#e5e7eb;color:#1f2937" onclick="openImportModal()">Importar CSV</button>
-            <button class="btn" style="background:#fee2e2;color:#991b1b" onclick="openBulkDeleteModal()" title="Borrar TODOS los intents">🗑️ Borrar todos</button>
-            <button class="btn btn-primary" onclick="openIntentModal()">+ Nuevo intent</button>
-          </div>
-        </div>
-
-        <details style="background:#eff6ff;border-left:4px solid #2563eb;padding:12px 16px;border-radius:6px;margin-bottom:16px;font-size:13px;color:#1e3a8a">
-          <summary style="cursor:pointer;font-weight:600">¿Qué es un intent y cómo funciona?</summary>
-          <div style="margin-top:10px;line-height:1.6">
-            <p style="margin:0 0 8px">Un <strong>intent</strong> es una pregunta frecuente de tus clientes + la respuesta que quieres darles automáticamente. Se compone de:</p>
-            <ul style="margin:4px 0 12px 20px">
-              <li><strong>Keywords:</strong> palabras que, al aparecer en la pregunta del usuario, activan este intent. Ejemplo: <code>horario, hora, abierto, abren</code></li>
-              <li><strong>Respuesta:</strong> texto que el bot enviará exactamente como está. Ejemplo: <code>Abrimos de lunes a viernes de 9h a 20h.</code></li>
-              <li><strong>Prioridad:</strong> si varios intents matchean, gana el de mayor prioridad (0-10)</li>
-            </ul>
-            <p style="margin:0 0 4px"><strong>¿Por qué crear intents?</strong></p>
-            <ul style="margin:4px 0 0 20px">
-              <li>Respuestas <strong>instantáneas</strong> sin esperar a la IA</li>
-              <li><strong>Coste cero</strong> — no consume tokens</li>
-              <li>Respuesta <strong>exacta y consistente</strong>, nunca improvisada</li>
-            </ul>
-            <p style="margin:12px 0 0;color:#475569"><em>Si un usuario pregunta algo que ningún intent cubre, la IA responde usando los datos del negocio. Cuanto más intents tengas, menos depende tu chatbot de la IA y más barato y rápido es.</em></p>
-          </div>
-        </details>
-
-        <div id="translateAllMsg" style="display:none;margin-bottom:12px"></div>
-        <div id="intentConflictsBlock" style="display:none;margin-bottom:16px"></div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Nombre</th><th>Keywords</th><th>Respuesta</th><th>Prioridad</th><th>Acciones</th></tr></thead>
-            <tbody id="intentsBody"></tbody>
-          </table>
-        </div>
       </div>
 
       <!-- ── Acciones ───────────────────── -->
@@ -540,7 +484,7 @@
         <div class="biz-pane active" id="bizPane-datos">
           <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-width:720px">
             <p style="font-size:13px;color:#6b7280;margin-bottom:20px">
-              Esta información alimenta al chatbot: cuando un usuario pregunta algo que no coincide con un intent, la IA usa estos datos para responder correctamente. Cuanto más completo y preciso, mejor responde el bot.
+              Esta información alimenta al chatbot: la IA usa estos datos para responder a los clientes. Cuanto más completo y preciso, mejor responde el bot.
             </p>
 
             <!-- Non-translatable fields -->
@@ -842,57 +786,6 @@
     </div><!-- /main -->
   </div><!-- /app -->
 
-  <!-- ═══════ MODAL: Intent ═══════ -->
-  <div class="modal-overlay" id="intentModal">
-    <div class="modal modal-large">
-      <h3 id="intentModalTitle">Nuevo intent</h3>
-      <input type="hidden" id="intentId" />
-
-      <!-- Shared fields -->
-      <div class="modal-section-title">Datos generales</div>
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label>Nombre interno</label>
-          <input id="intentName" placeholder="ej: horarios" />
-        </div>
-        <div class="form-group">
-          <label>Prioridad</label>
-          <input type="number" id="intentPriority" value="5" />
-        </div>
-      </div>
-
-      <!-- Button (shared across languages) -->
-      <div class="modal-section-title">Botón de acción (opcional)</div>
-      <div class="form-group">
-        <label>URL del botón <span style="color:#9ca3af;font-weight:400">— puedes usar <code>{lang}</code> para variar por idioma</span></label>
-        <input id="intentButtonUrl" placeholder="https://ejemplo.com/{lang}/horarios" />
-      </div>
-      <div class="form-group form-row">
-        <input type="checkbox" id="intentButtonNewTab" checked />
-        <label for="intentButtonNewTab" style="margin:0">Abrir en nueva pestaña</label>
-      </div>
-
-      <!-- Translations -->
-      <div class="modal-section-title">Traducciones por idioma</div>
-      <div class="translate-bar" id="translateBar" style="display:none">
-        <div class="translate-bar-text">
-          <strong>Generar traducciones automáticamente</strong> con IA para los demás idiomas activos del negocio.<br>
-          <span style="opacity:.75">Esto consume tokens. Se marcarán como pendientes de revisar.</span>
-        </div>
-        <button class="btn btn-primary btn-sm" id="translateBtn" onclick="generateAllTranslations()">
-          Traducir con IA
-        </button>
-      </div>
-      <div class="lang-tabs" id="intentLangTabs"></div>
-      <div id="intentLangPanes"></div>
-
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeIntentModal()">Cancelar</button>
-        <button class="btn btn-primary" id="saveIntentBtn" onclick="saveIntent()">Guardar</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ═══════ MODAL: Action button ═══════ -->
   <div class="modal-overlay" id="actionModal">
     <div class="modal">
@@ -970,129 +863,6 @@
         <button class="btn btn-danger btn-sm" onclick="deleteContact()" style="margin-right:auto">Borrar (RGPD)</button>
         <button class="btn btn-secondary" onclick="closeContactModal()">Cerrar</button>
         <button class="btn btn-primary" onclick="saveContactStatus()">Guardar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════ MODAL: AI prompt generator ═══════ -->
-  <div class="modal-overlay" id="aiPromptModal">
-    <div class="modal" style="width:760px;max-width:95vw">
-      <h3>🪄 Generar intents con IA externa</h3>
-      <p style="color:#6b7280;font-size:13px;margin:8px 0 16px">
-        Copia el prompt, pégalo en ChatGPT o Claude junto con la descripción de tu negocio.
-        Te devolverá un CSV listo para importar desde el botón "Importar CSV". El prompt está
-        diseñado para <strong>evitar conflictos</strong> de keywords y asignar prioridades sensatas.
-      </p>
-
-      <div class="form-group">
-        <label>Información del negocio <span style="color:#9ca3af;font-weight:400">(opcional — si la rellenas se pre-inyecta al final del prompt)</span></label>
-        <textarea id="aiPromptBizInfo" rows="5" placeholder="Cuéntale a la IA qué hace tu negocio: servicios, productos concretos, horarios, ubicación, formas de contacto, público objetivo... Cuanto más detallado, mejores intents."></textarea>
-        <p class="md-hint">Consejo: copia lo que tengas en <strong>Negocio → Datos del negocio</strong> (descripción + info extra + horarios) y pégalo aquí.</p>
-      </div>
-
-      <div class="form-group">
-        <label>Prompt completo <span style="color:#9ca3af;font-weight:400">(se regenera al editar arriba)</span></label>
-        <textarea id="aiPromptText" rows="14" readonly style="font-family:monospace;font-size:12px;background:#f9fafb"></textarea>
-      </div>
-
-      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
-        <button class="btn btn-primary" onclick="copyAiPrompt()">📋 Copiar prompt</button>
-        <a href="https://chat.openai.com/" target="_blank" rel="noopener" class="btn" style="background:#10a37f;color:#fff;text-decoration:none">Abrir ChatGPT ↗</a>
-        <a href="https://claude.ai/new" target="_blank" rel="noopener" class="btn" style="background:#cc785c;color:#fff;text-decoration:none">Abrir Claude ↗</a>
-        <span id="aiPromptCopied" style="display:none;color:#059669;font-size:13px;font-weight:600">✓ Copiado</span>
-      </div>
-
-      <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:10px 14px;border-radius:6px;margin-top:16px;font-size:13px;color:#14532d">
-        <strong>Próximos pasos:</strong>
-        <ol style="margin:4px 0 0 20px;padding:0">
-          <li>Copia el prompt con el botón de arriba</li>
-          <li>Pégalo en ChatGPT / Claude</li>
-          <li>Copia el CSV que te devuelva</li>
-          <li>Cierra este modal → <strong>Importar CSV</strong> → pega el contenido</li>
-          <li>Revisa el banner de conflictos (debe decir 0). Si hay alguno, edita la keyword concreta</li>
-        </ol>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeAiPromptModal()">Cerrar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════ MODAL: Bulk delete intents ═══════ -->
-  <div class="modal-overlay" id="bulkDeleteModal">
-    <div class="modal" style="width:480px">
-      <h3 style="color:#991b1b">🗑️ Borrar TODOS los intents</h3>
-      <p style="color:#4b5563;font-size:14px;margin:12px 0">
-        Se eliminarán <strong id="bulkDeleteCount">todos</strong> los intents de este negocio, incluidas todas sus traducciones.
-      </p>
-      <p style="color:#991b1b;font-size:13px;margin-bottom:16px">
-        <strong>Esta acción no se puede deshacer.</strong> Escribe <code style="background:#fee2e2;padding:2px 6px;border-radius:3px">BORRAR</code> para confirmar.
-      </p>
-      <input id="bulkDeleteConfirmInput" placeholder="Escribe BORRAR aquí" oninput="document.getElementById('bulkDeleteBtn').disabled = this.value.trim() !== 'BORRAR'" style="width:100%;padding:10px 14px;border:2px solid #fca5a5;border-radius:8px;font-family:monospace;font-size:14px" />
-      <div id="bulkDeleteMsg" style="display:none;margin-top:12px"></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeBulkDeleteModal()">Cancelar</button>
-        <button class="btn btn-danger" id="bulkDeleteBtn" disabled onclick="confirmBulkDelete()">Borrar todos</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════ MODAL: Sector templates gallery ═══════ -->
-  <div class="modal-overlay" id="templatesModal">
-    <div class="modal" style="width:720px;max-width:95vw">
-      <h3>Plantillas por sector</h3>
-      <p style="color:#6b7280;font-size:13px;margin:8px 0 20px">
-        Carga intents y textos pre-configurados según tu tipo de negocio. Los intents que ya tengas <strong>no se sobrescriben</strong>.
-      </p>
-      <div id="templatesGallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px"></div>
-      <div class="modal-actions" style="margin-top:20px">
-        <button class="btn btn-secondary" onclick="closeTemplatesModal()">Cerrar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════ MODAL: Template preview ═══════ -->
-  <div class="modal-overlay" id="templatePreviewModal">
-    <div class="modal" style="width:640px;max-width:95vw">
-      <h3 id="previewTitle">Vista previa</h3>
-      <p style="color:#6b7280;font-size:13px;margin:6px 0 16px" id="previewDescription"></p>
-      <div id="previewContent" style="max-height:50vh;overflow:auto"></div>
-      <div id="previewMsg" style="display:none;margin-top:12px"></div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeTemplatePreview()">Volver</button>
-        <button class="btn btn-primary" id="applyTemplateBtn" onclick="applyCurrentTemplate()">Aplicar plantilla</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════ MODAL: Import intents CSV ═══════ -->
-  <div class="modal-overlay" id="importIntentsModal">
-    <div class="modal" style="width:560px">
-      <h3>Importar intents desde CSV</h3>
-      <p style="color:#6b7280;font-size:13px;margin:8px 0 16px">
-        Sube un archivo CSV con los intents del negocio. Se crearán en el idioma por defecto
-        y se pueden traducir después desde la pestaña Intents.
-      </p>
-
-      <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#4b5563">
-        <strong>Columnas esperadas:</strong>
-        <code style="background:#fff;padding:2px 6px;border-radius:4px">name, keywords, response, priority, button_url, button_label</code>
-        <div style="margin-top:8px">
-          <a href="#" onclick="event.preventDefault();downloadImportTemplate()" style="color:#2563eb">Descargar plantilla de ejemplo</a>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Archivo CSV</label>
-        <input type="file" id="importFile" accept=".csv,text/csv" />
-      </div>
-
-      <div id="importSummary" style="display:none;margin-top:12px;padding:12px;border-radius:8px"></div>
-
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeImportModal()">Cerrar</button>
-        <button class="btn btn-primary" id="importSubmitBtn" onclick="submitImport()">Importar</button>
       </div>
     </div>
   </div>
@@ -1882,7 +1652,6 @@
 
         if (section === "platform") loadPlatform();
         if (section === "dashboard") loadDashboard();
-        if (section === "intents") loadIntents();
         if (section === "actions") loadActions();
         if (section === "conversations") loadConversations();
         if (section === "business") loadBusiness();
@@ -1905,28 +1674,36 @@
       }
 
       try {
-        const [bizRes, intentsRes, landingRes, langsRes] = await Promise.all([
+        const [bizRes, actionsRes, landingRes, langsRes] = await Promise.all([
           fetch(`${API}/business/${businessId}`),
-          fetch(`${API}/intents/?business_id=${businessId}`),
+          fetch(`${API}/business/${businessId}/action-buttons/admin`),
           fetch(`${API}/business/${businessId}/landing`),
           fetch(`${API}/business/${businessId}/languages`),
         ]);
         const biz = bizRes.ok ? await bizRes.json() : {};
-        const intents = intentsRes.ok ? await intentsRes.json() : [];
+        const actions = actionsRes.ok ? await actionsRes.json() : [];
         const landing = landingRes.ok ? await landingRes.json() : { landing_enabled: false };
         const langs = langsRes.ok ? await langsRes.json() : { supported: [] };
 
-        // 5 steps — each returns { done, label, action }
+        // Derived: does the business have meaningful extra_info content?
+        const extraInfo = (biz.extra_info || "").trim();
+        const hasKnowledge = extraInfo.length >= 80;  // rough heuristic
+
         const steps = [
           {
             done: !!(biz.name && biz.description && biz.phone && biz.email && biz.schedule && biz.schedule !== "{}"),
-            label: "Completa los datos de tu negocio (nombre, descripción, contacto, horario)",
+            label: "Completa los datos del negocio (nombre, descripción, contacto, horario)",
             section: "business", subtab: "datos",
           },
           {
-            done: intents.length >= 3,
-            label: `Crea al menos 3 intents (tienes ${intents.length})`,
-            section: "intents",
+            done: hasKnowledge,
+            label: "Rellena la 'Información del negocio' (FAQs, servicios, políticas) para alimentar al asistente",
+            section: "business", subtab: "datos",
+          },
+          {
+            done: actions.filter(a => a.is_active).length >= 2,
+            label: `Añade al menos 2 botones de acción (tienes ${actions.filter(a => a.is_active).length})`,
+            section: "actions",
           },
           {
             done: (langs.supported || []).length >= 2,
@@ -1964,7 +1741,7 @@
           ? "🎉 Tu chatbot está configurado correctamente"
           : `Configuración de tu chatbot (${steps.filter(s => s.done).length} de ${steps.length})`;
         const subtitle = allDone
-          ? "Has completado los pasos básicos. Puedes seguir afinando intents y textos en cualquier momento."
+          ? "Has completado los pasos básicos. Puedes seguir afinando la información y los botones cuando quieras."
           : "Completa estos pasos para sacar el máximo partido al chatbot.";
 
         const dismissBtn = allDone
@@ -2031,7 +1808,6 @@
         document.getElementById("statsGrid").innerHTML = `
           <div class="stat-card"><div class="label">Conversaciones</div><div class="value">${m.total_conversations}</div></div>
           <div class="stat-card"><div class="label">Mensajes</div><div class="value">${m.total_messages}</div></div>
-          <div class="stat-card"><div class="label">Fallback IA</div><div class="value">${m.ai_fallback_rate}%</div></div>
           <div class="stat-card"><div class="label">Tiempo resp. medio</div><div class="value">${m.avg_response_time_ms}ms</div></div>
         `;
 
@@ -2054,1099 +1830,22 @@
           } else {
             usageHtml = `<strong>${used.toLocaleString("es-ES")} tokens</strong> <span style="color:#9ca3af;font-size:13px">· sin límite mensual</span>`;
           }
-          const intentPct = Math.round((usage.intent_ratio || 0) * 100);
           const usageCard = document.getElementById("usageCard");
           if (usageCard) {
             usageCard.innerHTML = `
               <h3 style="font-size:16px;margin-bottom:12px">Consumo IA este mes</h3>
               ${usageHtml}
               <div style="display:flex;gap:24px;margin-top:16px;font-size:13px;color:#6b7280">
-                <span>Mensajes intents: <strong style="color:#1f2937">${usage.intent_messages}</strong></span>
                 <span>Mensajes IA: <strong style="color:#1f2937">${usage.ai_messages}</strong></span>
-                <span>Ahorro intents: <strong style="color:#10b981">${intentPct}%</strong></span>
                 <span style="margin-left:auto">Coste estimado: <strong style="color:#1f2937">$${(usage.cost_usd || 0).toFixed(4)}</strong></span>
               </div>
             `;
             usageCard.style.display = "block";
           }
         }
-
-        const tbody = document.getElementById("topIntentsBody");
-        if (m.top_intents.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="2" style="text-align:center;color:#9ca3af;padding:24px">Sin datos aun</td></tr>`;
-        } else {
-          tbody.innerHTML = m.top_intents.map((i) => `<tr><td>${esc(i.intent_name)}</td><td>${i.count}</td></tr>`).join("");
-        }
       } catch (e) {
         console.error("loadDashboard", e);
       }
-    }
-
-    /* ════════════════════════════════════════════════
-       INTENTS
-       ════════════════════════════════════════════════ */
-    // Per-modal state
-    const intentState = {
-      currentTab: null,            // active language code in modal
-      translations: {},            // {lang_code: {keywords, response, button_label, auto_translated, needs_review}}
-      langs: [],                   // [{code, native_name, flag_emoji}, ...] from business
-      defaultLang: "es",
-    };
-
-    // Keeps the set of normalized keywords that are in conflict, keyed by
-    // intent_id. Populated by loadIntentConflicts and consumed by
-    // renderIntents to paint chips red. Source of truth across the UI so
-    // the main table and the edit modal stay in sync.
-    let _conflictKwByIntent = {};
-
-    function _normKw(s) {
-      return (s || "").toLowerCase().trim()
-        .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[¿?¡!.,;:"'()[\]{}]/g, "");
-    }
-
-    async function loadIntents() {
-      try {
-        const [intentsRes, conflictsRes] = await Promise.all([
-          fetch(`${API}/intents/?business_id=${businessId}`),
-          fetch(`${API}/intents/conflicts?business_id=${businessId}`),
-        ]);
-        const intents = await intentsRes.json();
-        const conflicts = conflictsRes.ok ? await conflictsRes.json() : [];
-
-        // Build the conflicting-keyword index: for each intent, the set of
-        // normalized keywords that appear in any conflict. Render uses it
-        // to paint chips red.
-        _conflictKwByIntent = {};
-        conflicts.forEach(c => {
-          const a = _normKw(c.keyword_a);
-          const b = _normKw(c.keyword_b);
-          (_conflictKwByIntent[c.intent_a_id] = _conflictKwByIntent[c.intent_a_id] || new Set()).add(a);
-          (_conflictKwByIntent[c.intent_b_id] = _conflictKwByIntent[c.intent_b_id] || new Set()).add(b);
-        });
-
-        // Render the banner with these already-fetched conflicts
-        renderIntentConflictsBanner(conflicts);
-
-        const tbody = document.getElementById("intentsBody");
-        if (intents.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">No hay intents</td></tr>`;
-          return;
-        }
-
-        tbody.innerHTML = intents.map((i) => {
-          let kw = [];
-          try { kw = JSON.parse(i.keywords); } catch(e) {}
-          const conflictSet = _conflictKwByIntent[i.id];
-          const kwHtml = kw.map(k => {
-            const isConflict = conflictSet && conflictSet.has(_normKw(k));
-            const style = isConflict
-              ? 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5'
-              : '';
-            const title = isConflict ? ' title="Esta keyword está en conflicto con otro intent"' : '';
-            return `<span class="badge badge-intent" style="${style}"${title}>${esc(k)}</span>`;
-          }).join(" ");
-          const btn = i.button_url
-            ? `<span class="badge badge-active" title="${esc(i.button_url)}">CTA</span> `
-            : "";
-          return `<tr>
-            <td><strong>${esc(i.name)}</strong></td>
-            <td>${kwHtml}</td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${btn}${esc(i.response)}</td>
-            <td>${i.priority}</td>
-            <td>
-              <button class="btn btn-secondary btn-sm" onclick="editIntent(${i.id})">Editar</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteIntent(${i.id})">Borrar</button>
-            </td>
-          </tr>`;
-        }).join("");
-      } catch (e) {
-        console.error("loadIntents", e);
-      }
-    }
-
-    async function ensureBusinessLangsLoaded() {
-      if (intentState.langs.length > 0) return;
-      // If bizDataState already loaded, reuse it
-      if (bizDataState.langs.length > 0) {
-        intentState.langs = bizDataState.langs;
-        intentState.defaultLang = bizDataState.defaultLang;
-        return;
-      }
-      try {
-        const res = await fetch(`${API}/business/${businessId}/languages`);
-        if (!res.ok) throw new Error("languages endpoint failed");
-        const data = await res.json();
-        intentState.langs = data.supported || [];
-        intentState.defaultLang = data.default_language || "es";
-      } catch (e) {
-        console.warn("Could not fetch business languages, defaulting to ES", e);
-        intentState.langs = [{ code: "es", native_name: "Español", flag_emoji: "🇪🇸" }];
-        intentState.defaultLang = "es";
-      }
-    }
-
-    function emptyTranslation() {
-      return { keywords: "[]", response: "", button_label: "", auto_translated: false, needs_review: false };
-    }
-
-    /* ── Chip-style keyword editor ─────────────────────────────── */
-    function kwChipsHtml(code, kwArr, conflictSet) {
-      const chips = (kwArr || []).map(k => {
-        const isConflict = conflictSet && conflictSet.has(_normKw(k));
-        return `<span class="kw-chip${isConflict ? " kw-chip-conflict" : ""}"><span class="kw-chip-text">${esc(k)}</span><button type="button" onclick="removeKwChip(this)" aria-label="Quitar">×</button></span>`;
-      }).join("");
-      return `<div class="kw-chips-wrap ti-keywords" data-lang="${code}" onclick="(this.querySelector('input')||{}).focus && this.querySelector('input').focus()">
-        ${chips}<input type="text" placeholder="Añade keyword y pulsa coma o Enter" onkeydown="kwChipInputKey(event)" />
-      </div>`;
-    }
-
-    function _kwWrapFromInput(inputEl) {
-      return inputEl.closest(".kw-chips-wrap");
-    }
-
-    function kwChipInputKey(e) {
-      const inp = e.target;
-      const wrap = _kwWrapFromInput(inp);
-      if (!wrap) return;
-      // Add chip on comma or Enter
-      if (e.key === "," || e.key === "Enter") {
-        e.preventDefault();
-        const value = inp.value.trim().replace(/,$/, "").trim();
-        if (value) _addKwChip(wrap, value);
-        inp.value = "";
-        return;
-      }
-      // Backspace on empty input removes the last chip
-      if (e.key === "Backspace" && inp.value === "") {
-        const chips = wrap.querySelectorAll(".kw-chip");
-        const last = chips[chips.length - 1];
-        if (last) last.remove();
-      }
-    }
-
-    function _addKwChip(wrap, text) {
-      // Avoid duplicates within the same input
-      const existing = Array.from(wrap.querySelectorAll(".kw-chip-text")).map(n => n.textContent.toLowerCase());
-      if (existing.includes(text.toLowerCase())) return;
-      const chip = document.createElement("span");
-      chip.className = "kw-chip";
-      chip.innerHTML = `<span class="kw-chip-text">${esc(text)}</span><button type="button" onclick="removeKwChip(this)" aria-label="Quitar">×</button>`;
-      const inp = wrap.querySelector("input");
-      wrap.insertBefore(chip, inp);
-    }
-
-    function removeKwChip(btn) {
-      const chip = btn.closest(".kw-chip");
-      if (chip) chip.remove();
-    }
-
-    function _readKwChips(wrap) {
-      return Array.from(wrap.querySelectorAll(".kw-chip-text")).map(n => n.textContent.trim()).filter(Boolean);
-    }
-
-    function renderIntentTabs() {
-      const tabsEl = document.getElementById("intentLangTabs");
-      const panesEl = document.getElementById("intentLangPanes");
-      tabsEl.innerHTML = "";
-      panesEl.innerHTML = "";
-
-      intentState.langs.forEach((lang, idx) => {
-        const code = lang.code;
-        const t = intentState.translations[code] || emptyTranslation();
-        const isActive = (intentState.currentTab || intentState.langs[0].code) === code;
-
-        // Tab
-        const tab = document.createElement("button");
-        tab.type = "button";
-        tab.className = "lang-tab" + (isActive ? " active" : "");
-        const warn = t.needs_review ? '<span class="lang-tab-warn" title="Pendiente de revisar"></span>' : "";
-        tab.innerHTML = `<span class="lang-tab-flag">${esc(lang.flag_emoji || "🌐")}</span><span>${esc(lang.code.toUpperCase())}</span>${warn}`;
-        tab.addEventListener("click", () => switchIntentTab(code));
-        tabsEl.appendChild(tab);
-
-        // Pane
-        let kwArr = [];
-        try { kwArr = JSON.parse(t.keywords || "[]"); } catch(e) {}
-        const isDefault = code === intentState.defaultLang;
-        const banner = t.needs_review
-          ? `<div class="review-banner">
-               <div class="review-banner-text">
-                 <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
-                 Traducción generada con IA — pendiente de revisar
-               </div>
-               <button class="btn btn-secondary btn-sm" onclick="approveTranslation('${code}')">Aprobar</button>
-             </div>`
-          : "";
-
-        // Conflict set for this intent: keywords currently colliding with
-        // another intent (populated by loadIntents). Scoped here so the
-        // chip editor can paint the bad ones red.
-        const conflictKwSet = (intentState.editingId && _conflictKwByIntent[intentState.editingId]) || new Set();
-
-        const pane = document.createElement("div");
-        pane.className = "lang-pane" + (isActive ? " active" : "");
-        pane.dataset.lang = code;
-        pane.innerHTML = `
-          ${banner}
-          <div class="form-group">
-            <label>Keywords ${isDefault ? '<span class="badge badge-default">Idioma por defecto</span>' : ''}</label>
-            ${kwChipsHtml(code, kwArr, conflictKwSet)}
-            <p class="md-hint">Escribe una keyword y pulsa coma o Enter. Las que aparezcan en <span style="color:#991b1b">rojo</span> están en conflicto con otro intent.</p>
-          </div>
-          <div class="form-group">
-            <label>Respuesta</label>
-            ${mdEditorHtml(code, "ti-response", t.response || "", 5)}
-            <div class="md-hint">Usa los botones para dar formato. El usuario final verá la respuesta ya formateada.</div>
-          </div>
-          <div class="form-group">
-            <label>Texto del botón <span style="color:#9ca3af;font-weight:400">(solo si configuraste URL arriba)</span></label>
-            <input class="ti-button-label" data-lang="${code}" value="${esc(t.button_label || "")}" placeholder="ej: Reservar mesa" />
-          </div>
-        `;
-        panesEl.appendChild(pane);
-      });
-    }
-
-    function captureCurrentTab() {
-      // Save the values from the currently visible pane back into intentState.translations.
-      // Scope the query to the intent panes container — a global selector would match
-      // any .lang-pane.active (business, widget, contact) and capture wrong data.
-      const pane = document.querySelector("#intentLangPanes .lang-pane.active");
-      if (!pane) return;
-      const code = pane.dataset.lang;
-      const kwWrap = pane.querySelector(".ti-keywords");
-      const respInput = pane.querySelector(".ti-response");
-      const btnInput = pane.querySelector(".ti-button-label");
-      if (!kwWrap || !respInput || !btnInput) return;
-
-      // Read keywords from the chip editor. Also sweep in any text the user
-      // typed but didn't commit to a chip yet — behave like they pressed Enter.
-      const pending = kwWrap.querySelector("input");
-      if (pending && pending.value.trim()) {
-        _addKwChip(kwWrap, pending.value.trim());
-        pending.value = "";
-      }
-      const kw = _readKwChips(kwWrap);
-
-      const t = intentState.translations[code] || emptyTranslation();
-      t.keywords = JSON.stringify(kw);
-      t.response = respInput.value;
-      t.button_label = btnInput.value.trim();
-      intentState.translations[code] = t;
-    }
-
-    function switchIntentTab(code) {
-      captureCurrentTab();
-      intentState.currentTab = code;
-      renderIntentTabs();
-    }
-
-    /* ── AI prompt generator ──────────────────────────────────── */
-    const AI_INTENT_PROMPT_TEMPLATE = `Eres un experto en diseño de intents para chatbots. Necesito que generes los intents de un chatbot a partir de la información de un negocio que te voy a pasar al final. Sigue estas reglas ESTRICTAMENTE:
-
-# REGLAS DE DISEÑO
-
-## 1. Identifica los temas
-Lee la información del negocio y detecta los 5-12 temas sobre los que sus clientes preguntarán (horarios, ubicación, precios, productos concretos, contacto, servicios, etc.).
-
-## 2. Cada intent tiene:
-- name: identificador snake_case en español, 1-3 palabras (ej: "horarios", "reservar_mesa", "pedir_paella"). Sin espacios ni mayúsculas.
-- keywords: 4-8 palabras/frases disparadoras (separadas por coma)
-- response: respuesta CONCRETA de 1-3 frases. Puedes usar markdown ligero: **negrita**, *cursiva*, [texto](url), listas con "- ".
-- priority: entero 0-20 (ver regla 5)
-
-## 3. KEYWORDS: evita estas palabras como keywords sueltas
-De, a, en, con, por, para, sobre, y, o, que, si, como, cuando, donde, hola, buenos, buenas, yo, tú, me, mi, tu, tener, querer, saber, poder, hacer. Son demasiado genéricas y disparan en cualquier frase.
-
-Usa nombres CONCRETOS del dominio (paella, alérgeno, parking, envío) y verbos ESPECÍFICOS (encargar, reservar, devolver, cancelar).
-
-## 4. NUNCA repitas una keyword entre intents
-Cada palabra disparadora aparece en UN SOLO intent. Si dos intents comparten tema parcial, reformula las keywords del más genérico para que no incluyan el término específico.
-
-Ejemplo INCORRECTO:
-- intent "arroces": paella, arroz, fideua
-- intent "encargar_paella": encargar paella, pedir paella
-→ "paella" coincide con "encargar paella" (substring) y generaría conflicto.
-
-Ejemplo CORRECTO:
-- intent "carta_arroces": arroz, arroces, fideua, risotto (NO incluye "paella" sola)
-- intent "encargar_paella": encargar, encargo, pedir paella, reservar paella
-→ No hay solapamiento.
-
-## 5. PRIORIDADES (campo priority, 0-20)
-Usa este criterio:
-- 15 = Intents MUY específicos (combinan 2+ conceptos: "encargar paella", "cancelar reserva", "devolver producto")
-- 10 = Intents estándar sobre un tema frecuente (horarios, ubicación, contacto, envíos)
-- 5 = Intents genéricos o de menor urgencia (sobre nosotros, idiomas que hablamos, métodos de pago)
-- 20 = Reservar SOLO para intents de emergencia o legalmente críticos (cancelar, devolver, urgencias médicas, GDPR)
-
-Regla de oro: si dos intents PODRÍAN activarse con la misma pregunta, el más específico debe tener prioridad mayor. Ejemplo: "carta_arroces" prio 10, "encargar_paella" prio 15.
-
-## 6. TONO de las respuestas
-Cercano pero profesional. Nada de "nosotros" corporativo ni "usted". Evita redundancias. Termina a veces con una pregunta abierta o sugerencia de acción si aplica (llamar, reservar, etc.).
-
-# FORMATO DE SALIDA
-
-Devuelve SOLO un CSV con las siguientes columnas exactas (respeta el header):
-
-name,keywords,response,priority,button_url,button_label
-
-- Las respuestas que contengan comas, comillas o saltos de línea, envuélvelas en comillas dobles y escapa las comillas internas como "".
-- button_url y button_label pueden estar vacíos salvo que el intent sugiera una acción clara (reservar, ver menú, descargar, etc.), en cuyo caso genera un placeholder útil (ej: button_label="Reservar mesa").
-
-# ANTES DE DEVOLVER
-Haz una última pasada mental:
-1. ¿Hay keywords repetidas o substring entre intents? Si sí, reescribe.
-2. ¿Hay intents con priority=10 que podrían pisarse? Sube uno a 15.
-3. ¿Las keywords son todas palabras concretas del dominio, no fillers?
-4. ¿Cubres 5-12 temas principales? Ni menos ni más.
-
-# INFORMACIÓN DEL NEGOCIO
-
-{BUSINESS_INFO}`;
-
-    function _buildAiPrompt(bizInfo) {
-      const info = (bizInfo || "").trim() || "[PEGAR AQUÍ LA DESCRIPCIÓN DE TU NEGOCIO]";
-      return AI_INTENT_PROMPT_TEMPLATE.replace("{BUSINESS_INFO}", info);
-    }
-
-    function _regenerateAiPromptText() {
-      const info = document.getElementById("aiPromptBizInfo").value;
-      document.getElementById("aiPromptText").value = _buildAiPrompt(info);
-    }
-
-    function _formatSchedule(sch) {
-      // schedule might be: {lunes: "9-18"}, {horarios: {lunes: "9-18"}},
-      // or nested structures. Flatten one level if needed and stringify
-      // any remaining objects as "lunes 9-18, martes 9-18".
-      if (!sch || typeof sch !== "object") return "";
-      let entries = Object.entries(sch);
-      // If the only top-level entry is a wrapper ("horarios": {...}), unwrap it
-      if (entries.length === 1 && typeof entries[0][1] === "object" && entries[0][1] !== null) {
-        const inner = entries[0][1];
-        if (typeof inner === "object") entries = Object.entries(inner);
-      }
-      const lines = [];
-      for (const [k, v] of entries) {
-        if (v == null) continue;
-        if (typeof v === "string" || typeof v === "number") {
-          lines.push(`  - ${k}: ${v}`);
-        } else if (typeof v === "object") {
-          // e.g. {open: "9", close: "18"} → "9 - 18"; otherwise compact JSON
-          const vals = Object.values(v).filter(x => typeof x === "string" || typeof x === "number");
-          lines.push(`  - ${k}: ${vals.length ? vals.join(" - ") : JSON.stringify(v)}`);
-        }
-      }
-      return lines.join("\n");
-    }
-
-    async function openAiPromptModal() {
-      // Pre-fill business info from the current business data, if available.
-      // Prefer the default-language translation for description / extra_info
-      // since that's where the admin actually edits them.
-      let bizInfo = "";
-      try {
-        const [bizRes, langsRes, transRes] = await Promise.all([
-          fetch(`${API}/business/${businessId}`),
-          fetch(`${API}/business/${businessId}/languages`),
-          fetch(`${API}/business/${businessId}/translations`),
-        ]);
-        const b = bizRes.ok ? await bizRes.json() : {};
-        const langsData = langsRes.ok ? await langsRes.json() : {};
-        const translations = transRes.ok ? await transRes.json() : [];
-        const defaultLang = langsData.default_language || "es";
-        const defaultTrans = translations.find(t => t.language_code === defaultLang) || {};
-
-        const name = (defaultTrans.name || b.name || "").trim();
-        const description = (defaultTrans.description || b.description || "").trim();
-        const address = (defaultTrans.address || b.address || "").trim();
-        const extraInfo = (defaultTrans.extra_info || b.extra_info || "").trim();
-        const scheduleRaw = (defaultTrans.schedule || b.schedule || "").trim();
-
-        const parts = [];
-        if (name) parts.push(`Nombre: ${name}`);
-        if (description) parts.push(`Descripción: ${description}`);
-        if (address) parts.push(`Dirección: ${address}`);
-        if (b.phone) parts.push(`Teléfono: ${b.phone}`);
-        if (b.email) parts.push(`Email: ${b.email}`);
-        if (scheduleRaw && scheduleRaw !== "{}") {
-          try {
-            const sch = JSON.parse(scheduleRaw);
-            const formatted = _formatSchedule(sch);
-            if (formatted) parts.push(`Horarios:\n${formatted}`);
-          } catch (e) {
-            // not valid JSON — include as plain text so the AI has something
-            parts.push(`Horarios:\n  ${scheduleRaw}`);
-          }
-        }
-        if (extraInfo) parts.push(`Información extra:\n${extraInfo}`);
-        bizInfo = parts.join("\n\n");
-      } catch (e) { /* non-critical */ }
-
-      document.getElementById("aiPromptBizInfo").value = bizInfo;
-      _regenerateAiPromptText();
-      document.getElementById("aiPromptCopied").style.display = "none";
-      document.getElementById("aiPromptModal").classList.add("open");
-
-      // Live-update the prompt as the user edits the business info
-      const bizEl = document.getElementById("aiPromptBizInfo");
-      bizEl.oninput = _regenerateAiPromptText;
-    }
-
-    function closeAiPromptModal() {
-      document.getElementById("aiPromptModal").classList.remove("open");
-    }
-
-    function copyAiPrompt() {
-      const text = document.getElementById("aiPromptText").value;
-      navigator.clipboard.writeText(text).then(() => {
-        const msg = document.getElementById("aiPromptCopied");
-        msg.style.display = "inline";
-        setTimeout(() => { msg.style.display = "none"; }, 2500);
-      }).catch(() => {
-        // Fallback: select the textarea and let the user Ctrl+C
-        document.getElementById("aiPromptText").select();
-        alert("Pulsa Ctrl+C para copiar. El prompt está seleccionado.");
-      });
-    }
-
-    /* ── Bulk delete intents ──────────────────────────────────── */
-    async function openBulkDeleteModal() {
-      // Try to show a count so the admin knows how many they're deleting
-      try {
-        const res = await fetch(`${API}/intents/?business_id=${businessId}`);
-        if (res.ok) {
-          const list = await res.json();
-          document.getElementById("bulkDeleteCount").textContent = `los ${list.length}`;
-        }
-      } catch (e) { /* non-critical */ }
-
-      document.getElementById("bulkDeleteConfirmInput").value = "";
-      document.getElementById("bulkDeleteBtn").disabled = true;
-      document.getElementById("bulkDeleteMsg").style.display = "none";
-      document.getElementById("bulkDeleteModal").classList.add("open");
-    }
-
-    function closeBulkDeleteModal() {
-      document.getElementById("bulkDeleteModal").classList.remove("open");
-    }
-
-    async function confirmBulkDelete() {
-      const msgEl = document.getElementById("bulkDeleteMsg");
-      const btn = document.getElementById("bulkDeleteBtn");
-      msgEl.style.display = "none";
-      const original = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Borrando...';
-
-      try {
-        const res = await fetch(`${API}/intents/bulk?business_id=${businessId}&confirm=DELETE`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.detail || "Error");
-        }
-        const result = await res.json();
-        msgEl.className = "success-msg";
-        msgEl.textContent = `✅ ${result.deleted} intent(s) eliminado(s)`;
-        msgEl.style.display = "block";
-        await loadIntents();
-        setTimeout(closeBulkDeleteModal, 1500);
-      } catch (e) {
-        msgEl.className = "error-msg";
-        msgEl.textContent = "Error: " + e.message;
-        msgEl.style.display = "block";
-      } finally {
-        btn.innerHTML = original;
-        // Don't re-enable unless the user re-types BORRAR
-        btn.disabled = document.getElementById("bulkDeleteConfirmInput").value.trim() !== "BORRAR";
-      }
-    }
-
-    /* ── Sector templates ─────────────────────────────────────── */
-    let _currentTemplateId = null;
-
-    async function openTemplatesModal() {
-      try {
-        const res = await fetch(`${API}/templates`);
-        if (!res.ok) throw new Error("Error al cargar plantillas");
-        const templates = await res.json();
-        const gallery = document.getElementById("templatesGallery");
-        gallery.innerHTML = templates.map(t => `
-          <div onclick="previewTemplate('${t.id}')"
-               style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px;cursor:pointer;transition:border-color .15s,transform .15s;text-align:center"
-               onmouseover="this.style.borderColor='#2563eb';this.style.transform='translateY(-2px)'"
-               onmouseout="this.style.borderColor='#e5e7eb';this.style.transform='translateY(0)'">
-            <div style="font-size:36px;margin-bottom:8px">${t.icon}</div>
-            <div style="font-weight:700;color:#111827;margin-bottom:4px">${esc(t.name)}</div>
-            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">${esc(t.description)}</div>
-            <div style="font-size:11px;color:#2563eb;font-weight:600">${t.intent_count} intents incluidos</div>
-          </div>
-        `).join("");
-        document.getElementById("templatesModal").classList.add("open");
-      } catch (e) {
-        alert(e.message);
-      }
-    }
-
-    function closeTemplatesModal() {
-      document.getElementById("templatesModal").classList.remove("open");
-    }
-
-    async function previewTemplate(id) {
-      _currentTemplateId = id;
-      try {
-        const res = await fetch(`${API}/templates/${id}`);
-        if (!res.ok) throw new Error("Error al cargar plantilla");
-        const t = await res.json();
-
-        document.getElementById("previewTitle").textContent = `${t.icon} ${t.name}`;
-        document.getElementById("previewDescription").textContent = t.description;
-        document.getElementById("previewMsg").style.display = "none";
-
-        const intentsHtml = t.intents.map(i => `
-          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:baseline">
-              <strong style="color:#111827">${esc(i.name)}</strong>
-              <span style="font-size:11px;color:#6b7280">Prioridad ${i.priority}</span>
-            </div>
-            <div style="font-size:12px;color:#4b5563;margin:4px 0">
-              <strong>Keywords:</strong> ${i.keywords.map(k => `<code style="background:#e5e7eb;padding:1px 6px;border-radius:3px;font-size:11px">${esc(k)}</code>`).join(" ")}
-            </div>
-            <div style="font-size:13px;color:#374151;margin-top:6px">${esc(i.response)}</div>
-          </div>
-        `).join("");
-
-        document.getElementById("previewContent").innerHTML = `
-          <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;color:#1e3a8a">
-            Al aplicar la plantilla:
-            <ul style="margin:6px 0 0 20px;padding:0">
-              <li><strong>${t.intents.length} intents</strong> se crearán (los que ya tengas con el mismo nombre se saltan)</li>
-              <li>Si tu <strong>descripción / info extra / bienvenida</strong> están vacías, se rellenan con el ejemplo de esta plantilla</li>
-              <li>Todo queda en el idioma por defecto. Después puedes traducir con "Traducir todos con IA"</li>
-            </ul>
-          </div>
-          <h4 style="margin:12px 0 8px;font-size:14px">Intents que se crearán:</h4>
-          ${intentsHtml}
-          <h4 style="margin:16px 0 8px;font-size:14px">Descripción sugerida:</h4>
-          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;font-size:13px;color:#374151">${esc(t.business_description)}</div>
-          <h4 style="margin:16px 0 8px;font-size:14px">Info extra sugerida (con formato):</h4>
-          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;font-size:13px;color:#374151;white-space:pre-wrap;font-family:monospace">${esc(t.extra_info)}</div>
-        `;
-
-        document.getElementById("templatePreviewModal").classList.add("open");
-      } catch (e) {
-        alert(e.message);
-      }
-    }
-
-    function closeTemplatePreview() {
-      document.getElementById("templatePreviewModal").classList.remove("open");
-    }
-
-    async function applyCurrentTemplate() {
-      if (!_currentTemplateId) return;
-      const msgEl = document.getElementById("previewMsg");
-      const btn = document.getElementById("applyTemplateBtn");
-      msgEl.style.display = "none";
-      const original = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Aplicando...';
-
-      try {
-        const res = await fetch(`${API}/business/${businessId}/apply-template`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ template_id: _currentTemplateId }),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.detail || "Error");
-        }
-        const result = await res.json();
-
-        const parts = [];
-        parts.push(`${result.intents_created} intent(s) creado(s)`);
-        if (result.intents_skipped.length) {
-          parts.push(`${result.intents_skipped.length} saltado(s) (ya existían: ${result.intents_skipped.join(", ")})`);
-        }
-        const textUpdates = [];
-        if (result.business_description_updated) textUpdates.push("descripción");
-        if (result.extra_info_updated) textUpdates.push("info extra");
-        if (result.welcome_updated) textUpdates.push("bienvenida");
-        if (textUpdates.length) parts.push(`${textUpdates.join(", ")} actualizado(s)`);
-
-        msgEl.className = "success-msg";
-        msgEl.textContent = "✅ " + parts.join(". ") + ".";
-        msgEl.style.display = "block";
-
-        await loadIntents();
-
-        setTimeout(() => {
-          closeTemplatePreview();
-          closeTemplatesModal();
-        }, 2500);
-      } catch (e) {
-        msgEl.className = "error-msg";
-        msgEl.textContent = "Error: " + e.message;
-        msgEl.style.display = "block";
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
-      }
-    }
-
-    /* ── Traducir todos los intents ──────────────────────────────── */
-    async function translateAllIntents() {
-      const msgEl = document.getElementById("translateAllMsg");
-      const btn = document.getElementById("translateAllIntentsBtn");
-      msgEl.style.display = "none";
-
-      const ok = confirm(
-        `Se traducirán con IA todos los intents a los idiomas soportados del negocio.\n\n` +
-        `Solo se traducen los que aún no están aprobados. Consume tokens.\n\n` +
-        `¿Continuar?`
-      );
-      if (!ok) return;
-
-      const original = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Traduciendo...';
-
-      try {
-        const res = await fetch(`${API}/intents/translate-all?business_id=${businessId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ only_missing: true }),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.detail || "Error");
-        }
-        const result = await res.json();
-
-        const errorsHtml = result.errors.length
-          ? `<div style="color:#991b1b;margin-top:6px"><strong>Errores (${result.errors.length}):</strong><ul style="margin:4px 0 0 18px">${result.errors.map(e => `<li>${esc(e.name)}: ${esc(e.error)}</li>`).join("")}</ul></div>`
-          : "";
-
-        msgEl.className = result.errors.length ? "error-msg" : "success-msg";
-        msgEl.innerHTML = `
-          <div><strong>${result.translated}</strong> intent(s) traducido(s) de ${result.total_calls} llamadas.
-          ${result.skipped ? `${result.skipped} ya estaban aprobados y se saltaron.` : ""}</div>
-          ${errorsHtml}
-        `;
-        msgEl.style.display = "block";
-        await loadIntents();
-      } catch (e) {
-        msgEl.className = "error-msg";
-        msgEl.textContent = "Error al traducir: " + e.message;
-        msgEl.style.display = "block";
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
-      }
-    }
-
-    /* ── Import CSV ──────────────────────────────────────────────── */
-    function openImportModal() {
-      document.getElementById("importFile").value = "";
-      document.getElementById("importSummary").style.display = "none";
-      document.getElementById("importSubmitBtn").disabled = false;
-      document.getElementById("importSubmitBtn").textContent = "Importar";
-      document.getElementById("importIntentsModal").classList.add("open");
-    }
-
-    function closeImportModal() {
-      document.getElementById("importIntentsModal").classList.remove("open");
-    }
-
-    async function downloadImportTemplate() {
-      try {
-        const res = await fetch(`${API}/intents/template.csv`);
-        if (!res.ok) throw new Error("Error");
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "intents-template.csv";
-        a.click();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        alert("No se pudo descargar la plantilla: " + e.message);
-      }
-    }
-
-    async function submitImport() {
-      const fileInput = document.getElementById("importFile");
-      const summaryEl = document.getElementById("importSummary");
-      const btn = document.getElementById("importSubmitBtn");
-      summaryEl.style.display = "none";
-
-      if (!fileInput.files || !fileInput.files[0]) {
-        summaryEl.className = "error-msg";
-        summaryEl.textContent = "Selecciona un archivo CSV primero.";
-        summaryEl.style.display = "block";
-        return;
-      }
-
-      const form = new FormData();
-      form.append("file", fileInput.files[0]);
-
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Importando...';
-
-      try {
-        const res = await fetch(`${API}/intents/import?business_id=${businessId}`, {
-          method: "POST",
-          body: form,  // no Content-Type — browser sets multipart boundary
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.detail || "Error al importar");
-        }
-        const result = await res.json();
-
-        // Build summary
-        const skippedHtml = result.skipped.length
-          ? `<div><strong>Saltados (ya existían):</strong> ${result.skipped.map(s => esc(s.name)).join(", ")}</div>`
-          : "";
-        const errorsHtml = result.errors.length
-          ? `<div style="color:#991b1b;margin-top:6px"><strong>Errores:</strong><ul style="margin:4px 0 0 18px">${result.errors.map(e => `<li>Fila ${e.row}: ${esc(e.reason)}</li>`).join("")}</ul></div>`
-          : "";
-
-        summaryEl.className = result.errors.length ? "error-msg" : "success-msg";
-        summaryEl.innerHTML = `
-          <div><strong>${result.created}</strong> intent(s) creado(s) correctamente.</div>
-          ${skippedHtml}
-          ${errorsHtml}
-        `;
-        summaryEl.style.display = "block";
-        await loadIntents();
-      } catch (e) {
-        summaryEl.className = "error-msg";
-        summaryEl.textContent = e.message;
-        summaryEl.style.display = "block";
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Importar";
-      }
-    }
-
-    /* ── Intent keyword conflicts ────────────────────────────── */
-    async function loadIntentConflicts() {
-      // Kept for back-compat (other code paths might call it). Fetches
-      // fresh and delegates to renderIntentConflictsBanner.
-      try {
-        const res = await fetch(`${API}/intents/conflicts?business_id=${businessId}`);
-        const conflicts = res.ok ? await res.json() : [];
-        renderIntentConflictsBanner(conflicts);
-      } catch (e) {
-        const block = document.getElementById("intentConflictsBlock");
-        if (block) block.style.display = "none";
-      }
-    }
-
-    function renderIntentConflictsBanner(conflicts) {
-      const block = document.getElementById("intentConflictsBlock");
-      if (!block) return;
-      if (!conflicts || !conflicts.length) { block.style.display = "none"; return; }
-
-        // Group conflicts by language so the admin sees each language's mess separately
-        const byLang = {};
-        conflicts.forEach(c => {
-          (byLang[c.language_code] = byLang[c.language_code] || []).push(c);
-        });
-
-        const sections = Object.entries(byLang).map(([lang, list]) => {
-          const items = list.map(c => {
-            const kwA = `<code style="background:#fff;padding:2px 6px;border-radius:3px;color:#92400e;font-size:12px">${esc(c.keyword_a)}</code>`;
-            const kwB = `<code style="background:#fff;padding:2px 6px;border-radius:3px;color:#92400e;font-size:12px">${esc(c.keyword_b)}</code>`;
-            const typeLabel = c.type === "duplicate" ? "🔁 Duplicada" : "🔗 Solapamiento";
-            return `
-              <div style="border-top:1px solid #fde68a;padding:10px 0;font-size:13px;color:#78350f">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                  <strong>${typeLabel}:</strong>
-                  <button class="btn btn-sm" style="background:#fff;color:#78350f;border:1px solid #fde68a" onclick="editIntentById(${c.intent_a_id})">Editar "${esc(c.intent_a_name)}"</button>
-                </div>
-                <div style="margin:4px 0">
-                  Intent <strong>${esc(c.intent_a_name)}</strong> <span style="color:#9a3412">(prioridad ${c.intent_a_priority})</span> con ${kwA}
-                  <br>↕ en conflicto con<br>
-                  Intent <strong>${esc(c.intent_b_name)}</strong> <span style="color:#9a3412">(prioridad ${c.intent_b_priority})</span> con ${kwB}
-                </div>
-                <div style="color:#9a3412;font-style:italic;font-size:12px">${esc(c.explanation)}</div>
-              </div>
-            `;
-          }).join("");
-          return `
-            <div style="padding:6px 0">
-              <div style="font-weight:600;font-size:12px;text-transform:uppercase;color:#78350f">Idioma: ${lang.toUpperCase()} — ${list.length} conflicto${list.length === 1 ? "" : "s"}</div>
-              ${items}
-            </div>
-          `;
-        }).join("");
-
-        // Top offending keywords — which specific words cause most of the mess
-        const kwCount = {};
-        conflicts.forEach(c => {
-          const a = (c.keyword_a || "").toLowerCase().trim();
-          const b = (c.keyword_b || "").toLowerCase().trim();
-          if (a) kwCount[a] = (kwCount[a] || 0) + 1;
-          if (b !== a && b) kwCount[b] = (kwCount[b] || 0) + 1;
-        });
-        const topKws = Object.entries(kwCount)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8);
-
-        const topKwsHtml = topKws.length
-          ? `<div style="background:#fff;padding:10px 14px;border-radius:6px;margin:8px 0 14px;font-size:12px">
-              <strong style="color:#78350f">Top keywords implicadas:</strong>
-              ${topKws.map(([kw, n]) => `<code style="background:#fef3c7;padding:2px 6px;border-radius:3px;margin:0 2px;font-size:11px">${esc(kw)} × ${n}</code>`).join(" ")}
-              <div style="margin-top:6px;color:#78350f;font-style:italic">Empieza quitando las palabras genéricas (preposiciones, conectores, verbos generales) de todos los intents donde aparezcan.</div>
-            </div>`
-          : "";
-
-        const tooMany = conflicts.length > 50;
-        const nuclearTip = tooMany
-          ? `<div style="background:#fee2e2;padding:10px 14px;border-radius:6px;margin:0 0 10px;font-size:13px;color:#991b1b">
-              <strong>Demasiados conflictos (${conflicts.length}).</strong> Si el CSV de importación te lió, lo más rápido es <strong>borrar todos los intents y empezar de cero</strong> con una plantilla sectorial. Usa el botón rojo "🗑️ Borrar todos" arriba.
-            </div>`
-          : "";
-
-        block.innerHTML = `
-          <details style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px"${tooMany ? "" : ""}>
-            <summary style="cursor:pointer;font-weight:700;color:#78350f">⚠️ ${conflicts.length} conflicto${conflicts.length === 1 ? "" : "s"} de keywords entre intents — clic para revisar</summary>
-            ${nuclearTip}
-            <p style="font-size:13px;color:#78350f;margin:8px 0 0">
-              Cuando dos intents comparten keywords, el bot puede responder con el intent equivocado.
-              Resuélvelo editando keywords o ajustando la prioridad.
-            </p>
-            ${topKwsHtml}
-            ${sections}
-          </details>
-        `;
-      block.style.display = "block";
-    }
-
-    async function editIntentById(id) {
-      try {
-        const res = await fetch(`${API}/intents/${id}`);
-        if (!res.ok) return;
-        const intent = await res.json();
-        openIntentModal(intent);
-      } catch (e) { console.error(e); }
-    }
-
-    async function openIntentModal(data) {
-      await ensureBusinessLangsLoaded();
-      intentState.translations = {};
-      intentState.currentTab = intentState.defaultLang;
-      intentState.editingId = data ? data.id : null;
-
-      document.getElementById("intentModalTitle").textContent = data ? "Editar intent" : "Nuevo intent";
-      document.getElementById("intentId").value = data ? data.id : "";
-      document.getElementById("intentName").value = data ? data.name : "";
-      document.getElementById("intentPriority").value = data ? data.priority : 5;
-      document.getElementById("intentButtonUrl").value = data ? (data.button_url || "") : "";
-      document.getElementById("intentButtonNewTab").checked = data ? !!data.button_open_new_tab : true;
-
-      if (data) {
-        // Load existing translations
-        try {
-          const tres = await fetch(`${API}/intents/${data.id}/translations`);
-          const list = await tres.json();
-          list.forEach(t => {
-            intentState.translations[t.language_code] = {
-              keywords: t.keywords || "[]",
-              response: t.response || "",
-              button_label: t.button_label || "",
-              auto_translated: t.auto_translated,
-              needs_review: t.needs_review,
-            };
-          });
-        } catch (e) { console.error("Could not load translations", e); }
-
-        // Defensive fallback: if the default-lang translation is missing,
-        // seed it from the legacy keywords/response fields on the intent.
-        // This handles intents created before the i18n auto-seeding existed.
-        if (!intentState.translations[intentState.defaultLang]) {
-          intentState.translations[intentState.defaultLang] = {
-            keywords: data.keywords || "[]",
-            response: data.response || "",
-            button_label: "",
-            auto_translated: false,
-            needs_review: false,
-          };
-        }
-
-        document.getElementById("translateBar").style.display = "flex";
-      } else {
-        // New intent: pre-fill default lang with empty
-        intentState.translations[intentState.defaultLang] = emptyTranslation();
-        // Hide the AI translate bar — there's no intent yet to translate from
-        document.getElementById("translateBar").style.display = "none";
-      }
-
-      renderIntentTabs();
-      document.getElementById("intentModal").classList.add("open");
-    }
-
-    function closeIntentModal() {
-      document.getElementById("intentModal").classList.remove("open");
-    }
-
-    async function editIntent(id) {
-      try {
-        const res = await fetch(`${API}/intents/${id}`);
-        const data = await res.json();
-        await openIntentModal(data);
-      } catch (e) {
-        alert("Error: " + e.message);
-      }
-    }
-
-    function approveTranslation(code) {
-      const t = intentState.translations[code];
-      if (!t) return;
-      t.needs_review = false;
-      renderIntentTabs();
-    }
-
-    async function saveIntent() {
-      captureCurrentTab(); // capture the active tab before saving
-
-      const id = document.getElementById("intentId").value;
-      const name = document.getElementById("intentName").value.trim();
-      if (!name) { alert("El nombre interno es obligatorio"); return; }
-      const priority = parseInt(document.getElementById("intentPriority").value, 10) || 5;
-      const buttonUrl = document.getElementById("intentButtonUrl").value.trim();
-      const buttonNewTab = document.getElementById("intentButtonNewTab").checked;
-
-      // The default-lang translation provides the legacy keywords/response
-      // (used as the fallback "source" stored on Intent itself)
-      const defaultT = intentState.translations[intentState.defaultLang] || emptyTranslation();
-      if (!defaultT.response.trim()) {
-        alert("La respuesta en el idioma por defecto (" + intentState.defaultLang.toUpperCase() + ") es obligatoria");
-        return;
-      }
-
-      const body = {
-        name,
-        priority,
-        keywords: defaultT.keywords,
-        response: defaultT.response,
-        button_url: buttonUrl,
-        button_open_new_tab: buttonNewTab,
-      };
-
-      try {
-        let intentId = id;
-        if (id) {
-          const res = await fetch(`${API}/intents/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          if (!res.ok) throw new Error("Error al guardar el intent");
-        } else {
-          const res = await fetch(`${API}/intents/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...body, business_id: businessId }),
-          });
-          if (!res.ok) throw new Error("Error al crear el intent");
-          const created = await res.json();
-          intentId = created.id;
-        }
-
-        // Upsert each translation that has content
-        for (const lang of intentState.langs) {
-          const code = lang.code;
-          const t = intentState.translations[code];
-          if (!t) continue;
-          // Skip default lang on new intents — POST already seeded it
-          if (!id && code === intentState.defaultLang) continue;
-          if (!t.response.trim() && code !== intentState.defaultLang) continue;
-
-          await fetch(`${API}/intents/${intentId}/translations/${code}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keywords: t.keywords,
-              response: t.response,
-              button_label: t.button_label,
-              needs_review: t.needs_review,
-            }),
-          });
-        }
-
-        closeIntentModal();
-        loadIntents();
-      } catch (e) {
-        alert(e.message);
-      }
-    }
-
-    async function generateAllTranslations() {
-      const id = document.getElementById("intentId").value;
-      if (!id) { alert("Guarda primero el intent"); return; }
-
-      const btn = document.getElementById("translateBtn");
-      const original = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Traduciendo...';
-
-      try {
-        // Save the current edits first so they're the source for translation
-        captureCurrentTab();
-        const defaultT = intentState.translations[intentState.defaultLang];
-        if (defaultT) {
-          await fetch(`${API}/intents/${id}/translations/${intentState.defaultLang}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keywords: defaultT.keywords,
-              response: defaultT.response,
-              button_label: defaultT.button_label,
-              needs_review: false,
-            }),
-          });
-        }
-
-        const res = await fetch(`${API}/intents/${id}/translate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source_language: intentState.defaultLang }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.detail || "Error al traducir");
-        }
-        const data = await res.json();
-        // Update local state with new translations
-        data.translations.forEach(t => {
-          intentState.translations[t.language_code] = {
-            keywords: t.keywords,
-            response: t.response,
-            button_label: t.button_label,
-            auto_translated: t.auto_translated,
-            needs_review: t.needs_review,
-          };
-        });
-        renderIntentTabs();
-      } catch (e) {
-        alert("Error al traducir: " + e.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
-      }
-    }
-
-    async function deleteIntent(id) {
-      if (!confirm("Seguro que quieres borrar este intent?")) return;
-      await fetch(`${API}/intents/${id}`, { method: "DELETE" });
-      loadIntents();
     }
 
     /* ════════════════════════════════════════════════
@@ -3216,7 +1915,7 @@ Haz una última pasada mental:
       const el = document.getElementById("convMessages");
       el.innerHTML = messages.map((m) => {
         const time = new Date(m.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-        const sourceTag = m.source ? ` <span class="badge ${m.source === 'intent' ? 'badge-intent' : 'badge-ai'}">${m.source}</span>` : "";
+        const sourceTag = m.source ? ` <span class="badge badge-ai">${m.source}</span>` : "";
         const tIcon = translated ? ' 🌐' : "";
         return `<div class="chat-msg ${m.role}">
           ${esc(m.content)}
@@ -3368,8 +2067,6 @@ Haz una última pasada mental:
         bizDataState.langs = supportedLangs;
         bizDataState.defaultLang = defaultLang;
         contactFormState.langs = supportedLangs;
-        intentState.langs = supportedLangs;
-        intentState.defaultLang = defaultLang;
 
         // 3) Non-translatable fields
         document.getElementById("bizPhone").value = b.phone || "";
@@ -3974,7 +2671,7 @@ Haz una última pasada mental:
           if (e.target.checked) {
             const ok = confirm(
               `¿Activar ${lang.native_name}?\n\n` +
-              `Se añadirá como idioma disponible en el chatbot. Necesitarás traducir los textos (datos del negocio, intents, formulario, etc.) pulsando "Traducir con IA", lo que consume tokens.`
+              `Se añadirá como idioma disponible en el chatbot. Necesitarás traducir los textos (datos del negocio, botones, formulario, etc.) pulsando "Traducir con IA", lo que consume tokens.`
             );
             if (!ok) {
               e.target.checked = false;
@@ -3991,7 +2688,7 @@ Haz una última pasada mental:
             }
             const ok = confirm(
               `¿Desactivar ${lang.native_name}?\n\n` +
-              `Se perderán las traducciones de este idioma (datos del negocio, intents, formulario de contacto y mensajes de bienvenida).\n\n` +
+              `Se perderán las traducciones de este idioma (datos del negocio, botones, formulario de contacto y mensajes de bienvenida).\n\n` +
               `Si lo reactivas más tarde, tendrás que volver a traducir, lo que tiene coste de tokens de IA.`
             );
             if (!ok) {

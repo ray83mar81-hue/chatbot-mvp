@@ -373,20 +373,6 @@
     .cw-msg-bot li { margin: 2px 0; }
     .cw-msg-user { background: ${CONFIG.primaryColor}; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
 
-    /* Intent CTA button */
-    .cw-cta {
-      align-self: flex-start;
-      display: inline-flex; align-items: center; gap: 6px;
-      background: ${CONFIG.primaryColor}; color: #fff;
-      text-decoration: none;
-      padding: 9px 16px; border-radius: 20px; font-size: 13px; font-weight: 500;
-      box-shadow: 0 2px 6px rgba(0,0,0,.12);
-      transition: transform .15s, box-shadow .15s;
-      max-width: 82%;
-    }
-    .cw-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.18); }
-    .cw-cta::after { content: "→"; font-size: 14px; }
-
     /* Typing indicator */
     .cw-typing { display: flex; gap: 5px; align-items: center; padding: 10px 14px; align-self: flex-start; }
     .cw-typing span {
@@ -706,20 +692,6 @@
     return div;
   }
 
-  function addCtaButton(button) {
-    if (!button || !button.url || !button.label) return;
-    const a = document.createElement("a");
-    a.className = "cw-cta";
-    a.textContent = button.label;
-    a.href = button.url;
-    if (button.open_new_tab !== false) {
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-    }
-    messagesEl.appendChild(a);
-    scrollBottom();
-  }
-
   function showTyping() {
     const el = document.createElement("div");
     el.className = "cw-typing";
@@ -1001,7 +973,6 @@
       const decoder = new TextDecoder();
       let botBubble = null;
       let buffer = "";
-      let pendingButton = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1025,12 +996,6 @@
               botBubble.dataset.raw = (botBubble.dataset.raw || "") + event.content;
               botBubble.innerHTML = mdToHtml(botBubble.dataset.raw);
               scrollBottom();
-            } else if (event.type === "button") {
-              pendingButton = {
-                label: event.label,
-                url: event.url,
-                open_new_tab: event.open_new_tab,
-              };
             } else if (event.type === "error") {
               hideTyping();
               addMessage(event.content || t("genericError"), "bot");
@@ -1041,9 +1006,7 @@
         }
       }
 
-      if (pendingButton) addCtaButton(pendingButton);
-
-      if (!botBubble && !pendingButton) {
+      if (!botBubble) {
         hideTyping();
         addMessage(t("genericError"), "bot");
       }

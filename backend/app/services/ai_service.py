@@ -1,24 +1,29 @@
-"""
-AI service with dual provider support (OpenAI-compatible + Anthropic).
+"""AI service with dual provider support (OpenAI-compatible + Anthropic).
 
 The OpenAI-compatible path works with OpenRouter, OpenAI, Groq, Together, etc.
 and unlocks cheaper models (gpt-4o-mini, gemini-2.5-flash, llama-3.3).
 The Anthropic path is kept for Claude-only deployments.
 
 Switch via AI_PROVIDER env var.
+
+After the intent refactor, this service is the ONLY source of chat replies:
+the caller passes the active `language` and the business, and the system
+prompt is built from the LOCALIZED business fields (BusinessTranslation row
+for that language, with fallback to the base Business columns when empty).
 """
 import json
 from typing import AsyncIterator
 
 import anthropic
 import openai
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.business import Business
+from app.models.business_translation import BusinessTranslation
 from app.models.message import Message
 
 
-# ISO code → friendly name for the system prompt
 LANGUAGE_NAMES = {
     "es": "Spanish (Español)",
     "en": "English",
@@ -30,9 +35,38 @@ LANGUAGE_NAMES = {
 }
 
 
-def _build_system_prompt(business: Business, language: str = "es") -> str:
-    """Build a system prompt with the business context and target language."""
-    schedule = business.schedule or "{}"
+def _get_localized_fields(db: Session, business: Business, language: str) -> dict:
+    """Resolve the business fields in the target `language`, falling back to
+    the base Business columns per field when a translated value is empty.
+    """
+    translation = (
+        db.query(BusinessTranslation)
+        .filter(
+            BusinessTranslation.business_id == business.id,
+            BusinessTranslation.language_code == language,
+        )
+        .first()
+    )
+
+    def pick(tr_val, base_val) -> str:
+        v = (tr_val or "").strip()
+        return v if v else (base_val or "")
+
+    return {
+        "name":        pick(translation.name        if translation else None, business.name),
+        "description": pick(translation.description if translation else None, business.description),
+        "address":     pick(translation.address     if translation else None, business.address),
+        "schedule":    pick(translation.schedule    if translation else None, business.schedule),
+        "extra_info":  pick(translation.extra_info  if translation else None, business.extra_info),
+        # Non-translatable
+        "phone": business.phone or "",
+        "email": business.email or "",
+    }
+
+
+def _build_system_prompt(fields: dict, language: str) -> str:
+    """Compose the system prompt from pre-resolved localized fields."""
+    schedule = fields.get("schedule") or "{}"
     try:
         schedule_formatted = json.dumps(json.loads(schedule), ensure_ascii=False, indent=2)
     except (json.JSONDecodeError, TypeError):
@@ -40,18 +74,18 @@ def _build_system_prompt(business: Business, language: str = "es") -> str:
 
     language_name = LANGUAGE_NAMES.get(language, language)
 
-    return f"""You are the virtual assistant of "{business.name}". Your role is to help customers with their questions in a friendly, professional and concise way.
+    return f"""You are the virtual assistant of "{fields['name']}". Your role is to help customers with their questions in a friendly, professional and concise way.
 
 Business information:
-- Name: {business.name}
-- Description: {business.description}
-- Address: {business.address}
-- Phone: {business.phone}
-- Email: {business.email}
+- Name: {fields['name']}
+- Description: {fields['description']}
+- Address: {fields['address']}
+- Phone: {fields['phone']}
+- Email: {fields['email']}
 - Schedule: {schedule_formatted}
 
 Additional info:
-{business.extra_info}
+{fields['extra_info']}
 
 Rules:
 - Respond ONLY with information about this business. Do not invent facts.
@@ -62,7 +96,6 @@ Rules:
 
 
 def _build_messages(conversation_history: list[Message], user_message: str) -> list[dict]:
-    """Convert conversation history to API message format."""
     messages = []
     for msg in conversation_history:
         messages.append({"role": msg.role, "content": msg.content})
@@ -91,9 +124,7 @@ def _get_anthropic_client() -> anthropic.AsyncAnthropic:
 
 
 def _get_client():
-    """Legacy export used by other services for simple JSON tasks.
-    Returns the provider-appropriate client.
-    """
+    """Legacy export used by other services for simple JSON tasks."""
     if _use_openai():
         return _get_openai_client()
     return _get_anthropic_client()
@@ -139,15 +170,14 @@ def ai_fallback_message(business: Business) -> str:
 
 async def generate_ai_response(
     business: Business,
+    db: Session,
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
 ) -> tuple[str, int | None, int | None]:
-    """Generate a response and return (text, tokens_in, tokens_out).
-    Raises AIError on provider failure — the caller decides how to recover
-    (typically: log an incident and fall back to a canned message).
-    """
-    system_prompt = _build_system_prompt(business, language)
+    """Generate a reply in `language`. Returns (text, tokens_in, tokens_out)."""
+    fields = _get_localized_fields(db, business, language)
+    system_prompt = _build_system_prompt(fields, language)
     messages = _build_messages(conversation_history, user_message)
 
     try:
@@ -160,15 +190,15 @@ async def generate_ai_response(
 
 async def stream_ai_response(
     business: Business,
+    db: Session,
     conversation_history: list[Message],
     user_message: str,
     language: str = "es",
     usage_out: dict | None = None,
 ) -> AsyncIterator[str]:
-    """Yield text chunks. If usage_out dict is passed, populate it with
-    {'tokens_in': int, 'tokens_out': int} once the stream finishes.
-    """
-    system_prompt = _build_system_prompt(business, language)
+    """Yield text chunks. Populates usage_out with tokens if given."""
+    fields = _get_localized_fields(db, business, language)
+    system_prompt = _build_system_prompt(fields, language)
     messages = _build_messages(conversation_history, user_message)
 
     try:
@@ -186,7 +216,6 @@ async def stream_ai_response(
                     delta = chunk.choices[0].delta.content
                     if delta:
                         yield delta
-                # Last chunk carries usage (when include_usage=True)
                 if usage_out is not None and getattr(chunk, "usage", None):
                     usage_out["tokens_in"] = chunk.usage.prompt_tokens
                     usage_out["tokens_out"] = chunk.usage.completion_tokens
@@ -207,7 +236,6 @@ async def stream_ai_response(
                         usage_out["tokens_in"] = u.input_tokens
                         usage_out["tokens_out"] = u.output_tokens
     except Exception as e:
-        # Surface the error via the shared usage dict so the caller can log it
         if usage_out is not None:
             usage_out["_error"] = f"{type(e).__name__}: {e}"
         print(f"[AI Stream Error] {type(e).__name__}: {e}")
@@ -217,9 +245,7 @@ async def stream_ai_response(
 # ── JSON-only helper used by translation services ────────────────────────
 
 async def chat_json(system: str, user: str, max_tokens: int = 2000) -> str:
-    """One-shot call for translation services that need raw text back.
-    Uses the configured provider. Returns the raw assistant message string.
-    """
+    """One-shot call for translation services that need raw text back."""
     if _use_openai():
         client = _get_openai_client()
         resp = await client.chat.completions.create(

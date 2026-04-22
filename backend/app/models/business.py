@@ -51,7 +51,6 @@ class Business(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    intents = relationship("Intent", back_populates="business")
     conversations = relationship("Conversation", back_populates="business")
     admin_users = relationship("AdminUser", back_populates="business")
     contact_requests = relationship("ContactRequest", back_populates="business")

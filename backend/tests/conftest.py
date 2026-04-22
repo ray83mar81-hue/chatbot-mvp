@@ -9,11 +9,8 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.business import Business
 from app.models.contact_request import ContactRequest
-from app.models.intent import Intent
-from app.models.intent_translation import IntentTranslation
 from app.models.language import Language
 
-# In-memory SQLite for tests
 TEST_DB_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -30,7 +27,6 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
-# Languages seeded in every test DB
 SEED_LANGUAGES = [
     {"code": "es", "name": "Spanish",  "native_name": "Español",   "flag_emoji": "🇪🇸", "sort_order": 1},
     {"code": "en", "name": "English",  "native_name": "English",   "flag_emoji": "🇬🇧", "sort_order": 2},
@@ -43,7 +39,6 @@ SEED_LANGUAGES = [
 def setup_db():
     """Create tables before each test, drop after."""
     Base.metadata.create_all(bind=engine)
-    # Seed test data
     db = TestSession()
     if not db.query(Language).first():
         for lang in SEED_LANGUAGES:
@@ -70,62 +65,6 @@ def setup_db():
         db.add(biz)
         db.commit()
         db.refresh(biz)
-
-        intents = [
-            Intent(
-                business_id=biz.id,
-                name="horarios",
-                keywords=json.dumps(["horario", "hora", "abierto"]),
-                response="Lunes: 9:00 - 18:00",
-                priority=10,
-            ),
-            Intent(
-                business_id=biz.id,
-                name="wifi",
-                keywords=json.dumps(["wifi", "internet"]),
-                response="Si, tenemos WiFi gratis",
-                priority=5,
-            ),
-        ]
-        db.add_all(intents)
-        db.commit()
-        for i in intents:
-            db.refresh(i)
-
-        # Seed Spanish translations (the runtime matcher needs these)
-        translations = [
-            IntentTranslation(
-                intent_id=intents[0].id,
-                language_code="es",
-                keywords=intents[0].keywords,
-                response=intents[0].response,
-                button_label="",
-                auto_translated=False,
-                needs_review=False,
-            ),
-            IntentTranslation(
-                intent_id=intents[1].id,
-                language_code="es",
-                keywords=intents[1].keywords,
-                response=intents[1].response,
-                button_label="",
-                auto_translated=False,
-                needs_review=False,
-            ),
-            # English translation only for the wifi intent (so we can test
-            # both "matched in EN" and "no match in EN" scenarios)
-            IntentTranslation(
-                intent_id=intents[1].id,
-                language_code="en",
-                keywords=json.dumps(["wifi", "internet", "wi-fi"]),
-                response="Yes, we have free WiFi",
-                button_label="",
-                auto_translated=False,
-                needs_review=False,
-            ),
-        ]
-        db.add_all(translations)
-        db.commit()
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
