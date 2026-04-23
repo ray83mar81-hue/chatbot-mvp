@@ -894,9 +894,12 @@
   <div class="modal-overlay" id="aiConfigModal">
     <div class="modal" style="width:760px;max-width:95vw">
       <h3>Configuración IA · <span id="aiCfgTenantName">-</span></h3>
-      <p style="color:#6b7280;font-size:13px;margin:8px 0 20px">
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 12px">
         Proveedor, modelo y API key que usará este cliente para las respuestas de la IA. Si se deja todo en blanco, se usa la configuración global del servidor.
       </p>
+      <div id="aiCfgCurrentStatus" style="background:#f3f4f6;padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;color:#4b5563">
+        📌 <strong>Actualmente guardado:</strong> <span id="aiCfgCurrentSummary">cargando…</span>
+      </div>
 
       <div class="form-grid-2" style="gap:16px">
         <div class="form-group">
@@ -1262,8 +1265,16 @@
           }
           const quotaCell = `<a href="#" onclick="event.preventDefault();editQuota(${t.id}, ${quota || 0})" style="color:#2563eb">${quota ? quota.toLocaleString("es-ES") : "∞"}</a>`;
 
+          const aiLabel = t.ai_provider && t.ai_model
+            ? `🤖 <strong style="color:#5b21b6">${esc(t.ai_provider)}</strong> · ${esc(t.ai_model)}${t.ai_has_api_key ? "" : " <span style=\"color:#dc2626\">· sin API key</span>"}`
+            : `🤖 <span style="color:#9ca3af">config global</span>`;
+
           return `<tr>
-            <td><strong>${esc(t.name)}</strong><div style="font-size:11px;color:#9ca3af">#${t.id} · ${esc(t.admin_emails.join(", ") || "sin admin")}</div></td>
+            <td>
+              <strong>${esc(t.name)}</strong>
+              <div style="font-size:11px;color:#9ca3af">#${t.id} · ${esc(t.admin_emails.join(", ") || "sin admin")}</div>
+              <div style="font-size:11px;color:#6b7280;margin-top:2px">${aiLabel}</div>
+            </td>
             <td>${statusBadge}</td>
             <td>${t.conversations_count}</td>
             <td>${t.messages_count}</td>
@@ -1764,6 +1775,20 @@
           keyHint.style.color = "#9ca3af";
         }
 
+        // Summary line at the top of the modal
+        const summaryEl = document.getElementById("aiCfgCurrentSummary");
+        if (summaryEl) {
+          if (cfg.provider && cfg.model) {
+            const priceStr = (cfg.input_price_per_million != null && cfg.output_price_per_million != null)
+              ? ` · $${cfg.input_price_per_million.toFixed(2)}/M in, $${cfg.output_price_per_million.toFixed(2)}/M out`
+              : "";
+            const keyStr = cfg.has_api_key ? ` · key ${cfg.api_key_masked}` : " · <span style=\"color:#dc2626\">sin API key</span>";
+            summaryEl.innerHTML = `<strong style="color:#5b21b6">${esc(cfg.provider)}</strong> · <code>${esc(cfg.model)}</code>${esc(priceStr)}${keyStr}`;
+          } else {
+            summaryEl.innerHTML = `<em style="color:#9ca3af">sin configuración propia — usando configuración global del servidor</em>`;
+          }
+        }
+
         updateAiCfgVisibility();
         if (cfg.provider === "openrouter") loadOpenRouterModels();
       } catch (e) {
@@ -1802,10 +1827,10 @@
           const d = await res.json().catch(() => ({}));
           throw new Error(d.detail || "Error guardando configuración");
         }
-        msgEl.textContent = "Configuración guardada.";
-        msgEl.className = "success-msg";
-        msgEl.style.display = "block";
-        await loadAiConfig();
+        // Cierre del modal + refresco de la tabla de tenants para que la fila
+        // muestre el nuevo provider/model. Es la confirmación visual de save.
+        closeAiConfigModal();
+        await loadPlatform();
       } catch (e) {
         msgEl.textContent = "Error: " + e.message;
         msgEl.className = "error-msg";
@@ -1830,7 +1855,8 @@
           }),
         });
         if (!res.ok) throw new Error("Error");
-        await loadAiConfig();
+        closeAiConfigModal();
+        await loadPlatform();
       } catch (e) {
         alert("Error: " + e.message);
       }

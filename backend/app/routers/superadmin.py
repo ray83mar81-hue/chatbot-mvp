@@ -44,6 +44,12 @@ class BusinessStats(BaseModel):
     cost_usd: float  # estimated
     contact_requests_count: int
     admin_emails: list[str]
+    # Summary of the tenant's AI configuration (shown in the platform list so
+    # the admin sees at a glance which model each tenant is using). NULL means
+    # "falling back to the global env config".
+    ai_provider: str | None = None
+    ai_model: str | None = None
+    ai_has_api_key: bool = False
 
 
 class CreateTenantRequest(BaseModel):
@@ -143,6 +149,9 @@ def _stats_for(business: Business, db: Session) -> BusinessStats:
         cost_usd=_compute_cost_usd(int(tokens_in), int(tokens_out), business),
         contact_requests_count=contact_count,
         admin_emails=admin_emails,
+        ai_provider=business.ai_provider,
+        ai_model=business.ai_model,
+        ai_has_api_key=bool(business.ai_api_key),
     )
 
 
