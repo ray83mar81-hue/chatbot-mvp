@@ -478,7 +478,6 @@
           <button type="button" class="lang-tab" data-biztab="widget" onclick="switchBizTab('widget')">Widget</button>
           <button type="button" class="lang-tab" data-biztab="contacto" onclick="switchBizTab('contacto')">Formulario de contacto</button>
           <button type="button" class="lang-tab" data-biztab="web" onclick="switchBizTab('web')">Página web</button>
-          <button type="button" class="lang-tab" data-biztab="ia" onclick="switchBizTab('ia')">IA</button>
         </div>
 
         <!-- Sub-tab: Datos -->
@@ -643,68 +642,6 @@
           </div>
         </div>
 
-        <!-- Sub-tab: IA -->
-        <div class="biz-pane" id="bizPane-ia">
-          <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-width:760px">
-            <p style="color:#6b7280;font-size:14px;margin-bottom:20px">
-              Configura el proveedor y el modelo de IA que usará este chatbot. Si no configuras nada, se usa la configuración global del servidor.
-              <span id="aiCfgOwnedByPlatform" style="display:none;color:#92400e;font-weight:500"> · Actualmente gestionado por la plataforma.</span>
-            </p>
-
-            <div class="form-grid-2" style="gap:16px">
-              <div class="form-group">
-                <label>Proveedor</label>
-                <select id="aiCfgProvider" onchange="updateAiCfgVisibility()">
-                  <option value="">— (usar global del servidor) —</option>
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="openai">OpenAI (ChatGPT)</option>
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="gemini">Google Gemini</option>
-                  <option value="grok">Grok (xAI)</option>
-                  <option value="custom">Custom (OpenAI-compatible)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Modelo</label>
-                <div id="aiCfgModelOpenRouter" style="display:none">
-                  <input id="aiCfgModelOrSearch" placeholder="🔍 Filtrar modelos…" oninput="filterAiCfgModels()" />
-                  <select id="aiCfgModelOrList" size="6" style="width:100%;margin-top:6px;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-family:monospace;font-size:12px" onchange="selectOpenRouterModel()"></select>
-                </div>
-                <input id="aiCfgModel" placeholder="ej: gpt-4o-mini, claude-sonnet-4-5, gemini-2.0-flash, grok-beta" />
-              </div>
-            </div>
-
-            <div class="form-group" id="aiCfgBaseUrlGroup" style="display:none">
-              <label>Base URL</label>
-              <input id="aiCfgBaseUrl" placeholder="https://mi-endpoint-openai-compat/v1" />
-              <p class="md-hint">Solo para proveedores OpenAI-compatibles no listados arriba.</p>
-            </div>
-
-            <div class="form-group">
-              <label>API key <span id="aiCfgApiKeyHint" style="color:#9ca3af;font-weight:400"></span></label>
-              <input id="aiCfgApiKey" type="password" placeholder="sk-..." autocomplete="new-password" />
-              <p class="md-hint">La key se guarda en la base de datos y nunca se devuelve en claro por la API (se muestra enmascarada).</p>
-            </div>
-
-            <div class="form-grid-2" style="gap:16px">
-              <div class="form-group">
-                <label>Precio input (USD por millón de tokens)</label>
-                <input id="aiCfgInputPrice" type="number" step="0.0001" min="0" placeholder="0.15" />
-              </div>
-              <div class="form-group">
-                <label>Precio output (USD por millón de tokens)</label>
-                <input id="aiCfgOutputPrice" type="number" step="0.0001" min="0" placeholder="0.60" />
-              </div>
-            </div>
-            <p class="md-hint" style="margin-top:-8px">Para OpenRouter se rellena automáticamente al elegir modelo. Para otros proveedores, mira los precios en la docu del proveedor y escríbelos aquí.</p>
-
-            <div id="aiCfgMsg" style="display:none;margin-top:12px"></div>
-            <div style="display:flex;gap:8px;margin-top:16px">
-              <button class="btn btn-primary" onclick="saveAiConfig()">Guardar configuración IA</button>
-              <button class="btn btn-secondary" onclick="resetAiConfig()" title="Vacía todos los campos y usa la configuración global del servidor">Volver a configuración global</button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- ── Contacts ────────────────────── -->
@@ -949,6 +886,70 @@
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeInviteModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="submitInvite()">Crear usuario</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: AI config per tenant (superadmin only) ═══════ -->
+  <div class="modal-overlay" id="aiConfigModal">
+    <div class="modal" style="width:760px;max-width:95vw">
+      <h3>Configuración IA · <span id="aiCfgTenantName">-</span></h3>
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 20px">
+        Proveedor, modelo y API key que usará este cliente para las respuestas de la IA. Si se deja todo en blanco, se usa la configuración global del servidor.
+      </p>
+
+      <div class="form-grid-2" style="gap:16px">
+        <div class="form-group">
+          <label>Proveedor</label>
+          <select id="aiCfgProvider" onchange="updateAiCfgVisibility()">
+            <option value="">— (usar global del servidor) —</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="openai">OpenAI (ChatGPT)</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="grok">Grok (xAI)</option>
+            <option value="custom">Custom (OpenAI-compatible)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Modelo</label>
+          <div id="aiCfgModelOpenRouter" style="display:none">
+            <input id="aiCfgModelOrSearch" placeholder="🔍 Filtrar modelos…" oninput="filterAiCfgModels()" />
+            <select id="aiCfgModelOrList" size="6" style="width:100%;margin-top:6px;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-family:monospace;font-size:12px" onchange="selectOpenRouterModel()"></select>
+          </div>
+          <input id="aiCfgModel" placeholder="ej: gpt-4o-mini, claude-sonnet-4-5, gemini-2.0-flash, grok-beta" />
+        </div>
+      </div>
+
+      <div class="form-group" id="aiCfgBaseUrlGroup" style="display:none">
+        <label>Base URL</label>
+        <input id="aiCfgBaseUrl" placeholder="https://mi-endpoint-openai-compat/v1" />
+        <p class="md-hint">Solo para proveedores OpenAI-compatibles no listados arriba.</p>
+      </div>
+
+      <div class="form-group">
+        <label>API key <span id="aiCfgApiKeyHint" style="color:#9ca3af;font-weight:400"></span></label>
+        <input id="aiCfgApiKey" type="password" placeholder="sk-..." autocomplete="new-password" />
+        <p class="md-hint">La key se guarda en la DB y nunca se devuelve en claro por la API (solo enmascarada).</p>
+      </div>
+
+      <div class="form-grid-2" style="gap:16px">
+        <div class="form-group">
+          <label>Precio input (USD por millón de tokens)</label>
+          <input id="aiCfgInputPrice" type="number" step="0.0001" min="0" placeholder="0.15" />
+        </div>
+        <div class="form-group">
+          <label>Precio output (USD por millón de tokens)</label>
+          <input id="aiCfgOutputPrice" type="number" step="0.0001" min="0" placeholder="0.60" />
+        </div>
+      </div>
+      <p class="md-hint" style="margin-top:-8px">OpenRouter auto-rellena al elegir modelo. Otros proveedores: copia los precios de su docu.</p>
+
+      <div id="aiCfgMsg" style="display:none;margin-top:12px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger btn-sm" onclick="resetAiConfig()" style="margin-right:auto" title="Borra la config del tenant y vuelve a usar la global del servidor">Volver a config global</button>
+        <button class="btn btn-secondary" onclick="closeAiConfigModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveAiConfig()">Guardar</button>
       </div>
     </div>
   </div>
@@ -1272,6 +1273,7 @@
             <td>${last}</td>
             <td style="white-space:nowrap">
               <button class="btn btn-secondary btn-sm" onclick="impersonate(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Ver como</button>
+              <button class="btn btn-sm" style="background:#ede9fe;color:#5b21b6" onclick="openAiConfigModal(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">⚙️ IA</button>
               <button class="btn btn-sm" style="background:${t.is_active ? "#fbbf24" : "#10b981"};color:#fff" onclick="toggleTenantActive(${t.id}, ${!t.is_active})">${t.is_active ? "Suspender" : "Activar"}</button>
             </td>
           </tr>`;
@@ -1653,6 +1655,184 @@
         await loadPlatform();
       } catch (e) {
         alert("Error al cambiar estado: " + e.message);
+      }
+    }
+
+    /* ── AI config per tenant (superadmin-only modal) ──────────────── */
+    const aiCfgState = {
+      bizId: null,              // tenant currently being edited
+      openRouterModels: null,   // cached list for the session
+    };
+
+    function openAiConfigModal(bizId, bizName) {
+      aiCfgState.bizId = bizId;
+      document.getElementById("aiCfgTenantName").textContent = bizName || `#${bizId}`;
+      document.getElementById("aiCfgMsg").style.display = "none";
+      document.getElementById("aiConfigModal").classList.add("open");
+      loadAiConfig();
+    }
+
+    function closeAiConfigModal() {
+      document.getElementById("aiConfigModal").classList.remove("open");
+      aiCfgState.bizId = null;
+    }
+
+    function updateAiCfgVisibility() {
+      const provider = document.getElementById("aiCfgProvider").value;
+      const orBlock = document.getElementById("aiCfgModelOpenRouter");
+      const modelInput = document.getElementById("aiCfgModel");
+      const baseUrlGroup = document.getElementById("aiCfgBaseUrlGroup");
+      orBlock.style.display = provider === "openrouter" ? "block" : "none";
+      modelInput.style.display = provider === "openrouter" ? "none" : "";
+      baseUrlGroup.style.display = provider === "custom" ? "" : "none";
+      if (provider === "openrouter" && !aiCfgState.openRouterModels) {
+        loadOpenRouterModels();
+      }
+    }
+
+    async function loadOpenRouterModels() {
+      const listEl = document.getElementById("aiCfgModelOrList");
+      if (!listEl) return;
+      listEl.innerHTML = `<option disabled>Cargando modelos…</option>`;
+      try {
+        const res = await fetch(`${API}/superadmin/ai/openrouter-models`);
+        if (!res.ok) throw new Error("No se pudo cargar la lista de modelos");
+        aiCfgState.openRouterModels = await res.json();
+        renderOpenRouterModels();
+      } catch (e) {
+        listEl.innerHTML = `<option disabled>${esc(e.message)}</option>`;
+      }
+    }
+
+    function renderOpenRouterModels() {
+      const listEl = document.getElementById("aiCfgModelOrList");
+      const filter = (document.getElementById("aiCfgModelOrSearch").value || "").trim().toLowerCase();
+      const currentModel = document.getElementById("aiCfgModel").value;
+      const models = aiCfgState.openRouterModels || [];
+      const filtered = filter
+        ? models.filter(m => m.id.toLowerCase().includes(filter) || (m.name || "").toLowerCase().includes(filter))
+        : models;
+      listEl.innerHTML = filtered.slice(0, 300).map(m => {
+        const priceHint = m.input_price_per_million != null
+          ? ` — $${m.input_price_per_million.toFixed(2)}/M in, $${(m.output_price_per_million || 0).toFixed(2)}/M out`
+          : "";
+        const sel = m.id === currentModel ? " selected" : "";
+        return `<option value="${esc(m.id)}"${sel}>${esc(m.id)}${esc(priceHint)}</option>`;
+      }).join("");
+    }
+
+    function filterAiCfgModels() { renderOpenRouterModels(); }
+
+    function selectOpenRouterModel() {
+      const id = document.getElementById("aiCfgModelOrList").value;
+      if (!id) return;
+      document.getElementById("aiCfgModel").value = id;
+      const model = (aiCfgState.openRouterModels || []).find(m => m.id === id);
+      if (model) {
+        if (model.input_price_per_million != null) {
+          document.getElementById("aiCfgInputPrice").value = model.input_price_per_million;
+        }
+        if (model.output_price_per_million != null) {
+          document.getElementById("aiCfgOutputPrice").value = model.output_price_per_million;
+        }
+      }
+    }
+
+    async function loadAiConfig() {
+      if (!aiCfgState.bizId) return;
+      try {
+        const res = await fetch(`${API}/superadmin/businesses/${aiCfgState.bizId}/ai-config`);
+        if (!res.ok) throw new Error("No se pudo cargar la configuración de IA");
+        const cfg = await res.json();
+
+        document.getElementById("aiCfgProvider").value = cfg.provider || "";
+        document.getElementById("aiCfgModel").value = cfg.model || "";
+        document.getElementById("aiCfgBaseUrl").value = cfg.base_url || "";
+        document.getElementById("aiCfgInputPrice").value = cfg.input_price_per_million ?? "";
+        document.getElementById("aiCfgOutputPrice").value = cfg.output_price_per_million ?? "";
+
+        const keyInput = document.getElementById("aiCfgApiKey");
+        keyInput.value = "";
+        const keyHint = document.getElementById("aiCfgApiKeyHint");
+        if (cfg.has_api_key) {
+          keyInput.placeholder = `Ya hay una key guardada (${cfg.api_key_masked}). Deja vacío para mantenerla.`;
+          keyHint.textContent = "— actualmente configurada";
+          keyHint.style.color = "#059669";
+        } else {
+          keyInput.placeholder = "sk-...";
+          keyHint.textContent = "— no configurada";
+          keyHint.style.color = "#9ca3af";
+        }
+
+        updateAiCfgVisibility();
+        if (cfg.provider === "openrouter") loadOpenRouterModels();
+      } catch (e) {
+        console.error("loadAiConfig", e);
+      }
+    }
+
+    async function saveAiConfig() {
+      if (!aiCfgState.bizId) return;
+      const msgEl = document.getElementById("aiCfgMsg");
+      msgEl.style.display = "none";
+
+      const provider = document.getElementById("aiCfgProvider").value || null;
+      const model = (document.getElementById("aiCfgModel").value || "").trim() || null;
+      const baseUrl = (document.getElementById("aiCfgBaseUrl").value || "").trim() || null;
+      const apiKeyRaw = document.getElementById("aiCfgApiKey").value;
+      const inputPriceRaw = document.getElementById("aiCfgInputPrice").value;
+      const outputPriceRaw = document.getElementById("aiCfgOutputPrice").value;
+
+      const payload = {
+        provider: provider,
+        model: model,
+        base_url: provider === "custom" ? baseUrl : null,
+        input_price_per_million: inputPriceRaw === "" ? null : parseFloat(inputPriceRaw),
+        output_price_per_million: outputPriceRaw === "" ? null : parseFloat(outputPriceRaw),
+      };
+      if (apiKeyRaw.length > 0) payload.api_key = apiKeyRaw;
+
+      try {
+        const res = await fetch(`${API}/superadmin/businesses/${aiCfgState.bizId}/ai-config`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error guardando configuración");
+        }
+        msgEl.textContent = "Configuración guardada.";
+        msgEl.className = "success-msg";
+        msgEl.style.display = "block";
+        await loadAiConfig();
+      } catch (e) {
+        msgEl.textContent = "Error: " + e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
+    }
+
+    async function resetAiConfig() {
+      if (!aiCfgState.bizId) return;
+      if (!confirm("¿Volver a la configuración global del servidor? Se borrarán provider, modelo, API key y precios de este tenant.")) return;
+      try {
+        const res = await fetch(`${API}/superadmin/businesses/${aiCfgState.bizId}/ai-config`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: null,
+            model: null,
+            api_key: "",
+            base_url: null,
+            input_price_per_million: null,
+            output_price_per_million: null,
+          }),
+        });
+        if (!res.ok) throw new Error("Error");
+        await loadAiConfig();
+      } catch (e) {
+        alert("Error: " + e.message);
       }
     }
 
@@ -2068,7 +2248,6 @@
         p.classList.toggle("active", p.id === "bizPane-" + tab);
       });
       if (tab === "web") loadLandingSettings();
-      if (tab === "ia") loadAiConfig();
     }
 
     /* ════════════════════════════════════════════════
@@ -3524,184 +3703,6 @@
         a.click();
         URL.revokeObjectURL(a.href);
       });
-    }
-
-    /* ════════════════════════════════════════════════
-       AI CONFIG (Fase 5 — per-tenant provider/model/key)
-       ════════════════════════════════════════════════ */
-    // When the user leaves the API-key field empty, we must NOT overwrite the
-    // stored key. Backend treats a missing "api_key" field as unchanged.
-    const aiCfgState = {
-      openRouterModels: null,  // [{id, name, context_length, input_price_per_million, output_price_per_million}] or null if not loaded
-    };
-
-    function updateAiCfgVisibility() {
-      const provider = document.getElementById("aiCfgProvider").value;
-      const orBlock = document.getElementById("aiCfgModelOpenRouter");
-      const modelInput = document.getElementById("aiCfgModel");
-      const baseUrlGroup = document.getElementById("aiCfgBaseUrlGroup");
-      orBlock.style.display = provider === "openrouter" ? "block" : "none";
-      modelInput.style.display = provider === "openrouter" ? "none" : "";
-      baseUrlGroup.style.display = provider === "custom" ? "" : "none";
-      if (provider === "openrouter" && !aiCfgState.openRouterModels) {
-        loadOpenRouterModels();
-      }
-    }
-
-    async function loadOpenRouterModels() {
-      const listEl = document.getElementById("aiCfgModelOrList");
-      if (!listEl) return;
-      listEl.innerHTML = `<option disabled>Cargando modelos…</option>`;
-      try {
-        const res = await fetch(`${API}/ai/openrouter-models`);
-        if (!res.ok) throw new Error("No se pudo cargar la lista de modelos");
-        const models = await res.json();
-        aiCfgState.openRouterModels = models;
-        renderOpenRouterModels();
-      } catch (e) {
-        listEl.innerHTML = `<option disabled>${esc(e.message)}</option>`;
-      }
-    }
-
-    function renderOpenRouterModels() {
-      const listEl = document.getElementById("aiCfgModelOrList");
-      const filter = (document.getElementById("aiCfgModelOrSearch").value || "").trim().toLowerCase();
-      const currentModel = document.getElementById("aiCfgModel").value;
-      const models = aiCfgState.openRouterModels || [];
-      const filtered = filter
-        ? models.filter(m => m.id.toLowerCase().includes(filter) || (m.name || "").toLowerCase().includes(filter))
-        : models;
-      listEl.innerHTML = filtered.slice(0, 300).map(m => {
-        const priceHint = m.input_price_per_million != null
-          ? ` — $${m.input_price_per_million.toFixed(2)}/M in, $${(m.output_price_per_million || 0).toFixed(2)}/M out`
-          : "";
-        const sel = m.id === currentModel ? " selected" : "";
-        return `<option value="${esc(m.id)}"${sel}>${esc(m.id)}${esc(priceHint)}</option>`;
-      }).join("");
-    }
-
-    function filterAiCfgModels() {
-      renderOpenRouterModels();
-    }
-
-    function selectOpenRouterModel() {
-      const listEl = document.getElementById("aiCfgModelOrList");
-      const id = listEl.value;
-      if (!id) return;
-      document.getElementById("aiCfgModel").value = id;
-      const model = (aiCfgState.openRouterModels || []).find(m => m.id === id);
-      if (model) {
-        if (model.input_price_per_million != null) {
-          document.getElementById("aiCfgInputPrice").value = model.input_price_per_million;
-        }
-        if (model.output_price_per_million != null) {
-          document.getElementById("aiCfgOutputPrice").value = model.output_price_per_million;
-        }
-      }
-    }
-
-    async function loadAiConfig() {
-      try {
-        const res = await fetch(`${API}/business/${businessId}/ai-config`);
-        if (!res.ok) throw new Error("No se pudo cargar la configuración de IA");
-        const cfg = await res.json();
-
-        document.getElementById("aiCfgProvider").value = cfg.provider || "";
-        document.getElementById("aiCfgModel").value = cfg.model || "";
-        document.getElementById("aiCfgBaseUrl").value = cfg.base_url || "";
-        document.getElementById("aiCfgInputPrice").value = cfg.input_price_per_million ?? "";
-        document.getElementById("aiCfgOutputPrice").value = cfg.output_price_per_million ?? "";
-
-        const keyInput = document.getElementById("aiCfgApiKey");
-        keyInput.value = "";
-        const keyHint = document.getElementById("aiCfgApiKeyHint");
-        if (cfg.has_api_key) {
-          keyInput.placeholder = `Ya hay una key guardada (${cfg.api_key_masked}). Deja este campo vacío para mantenerla.`;
-          keyHint.textContent = "— actualmente configurada";
-          keyHint.style.color = "#059669";
-        } else {
-          keyInput.placeholder = "sk-...";
-          keyHint.textContent = "— no configurada";
-          keyHint.style.color = "#9ca3af";
-        }
-
-        const ownerFlag = document.getElementById("aiCfgOwnedByPlatform");
-        if (ownerFlag) ownerFlag.style.display = "none";  // owner can edit freely; superadmin impersonation also shows full access
-
-        updateAiCfgVisibility();
-        if (cfg.provider === "openrouter") {
-          // Ensure dropdown shows current selection once loaded
-          loadOpenRouterModels();
-        }
-      } catch (e) {
-        console.error("loadAiConfig", e);
-      }
-    }
-
-    async function saveAiConfig() {
-      const msgEl = document.getElementById("aiCfgMsg");
-      msgEl.style.display = "none";
-
-      const provider = document.getElementById("aiCfgProvider").value || null;
-      const model = (document.getElementById("aiCfgModel").value || "").trim() || null;
-      const baseUrl = (document.getElementById("aiCfgBaseUrl").value || "").trim() || null;
-      const apiKeyRaw = document.getElementById("aiCfgApiKey").value;
-      const inputPriceRaw = document.getElementById("aiCfgInputPrice").value;
-      const outputPriceRaw = document.getElementById("aiCfgOutputPrice").value;
-
-      const payload = {
-        provider: provider,
-        model: model,
-        base_url: provider === "custom" ? baseUrl : null,
-        input_price_per_million: inputPriceRaw === "" ? null : parseFloat(inputPriceRaw),
-        output_price_per_million: outputPriceRaw === "" ? null : parseFloat(outputPriceRaw),
-      };
-      // Only send api_key if the user typed a new value. Empty = keep existing.
-      if (apiKeyRaw.length > 0) {
-        payload.api_key = apiKeyRaw;
-      }
-
-      try {
-        const res = await fetch(`${API}/business/${businessId}/ai-config`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.detail || "Error guardando configuración");
-        }
-        msgEl.textContent = "Configuración guardada.";
-        msgEl.className = "success-msg";
-        msgEl.style.display = "block";
-        await loadAiConfig();  // re-render with masked key
-      } catch (e) {
-        msgEl.textContent = "Error: " + e.message;
-        msgEl.className = "error-msg";
-        msgEl.style.display = "block";
-      }
-    }
-
-    async function resetAiConfig() {
-      if (!confirm("¿Volver a la configuración global del servidor? Se borrarán provider, modelo, API key y precios de este tenant.")) return;
-      try {
-        const res = await fetch(`${API}/business/${businessId}/ai-config`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            provider: null,
-            model: null,
-            api_key: "",  // explicit clear
-            base_url: null,
-            input_price_per_million: null,
-            output_price_per_million: null,
-          }),
-        });
-        if (!res.ok) throw new Error("Error");
-        await loadAiConfig();
-      } catch (e) {
-        alert("Error: " + e.message);
-      }
     }
 
     /* ════════════════════════════════════════════════

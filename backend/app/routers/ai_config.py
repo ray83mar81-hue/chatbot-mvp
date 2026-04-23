@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import assert_business_write, get_current_user
+from app.deps import require_superadmin
 from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.schemas.ai_config import (
@@ -45,15 +45,14 @@ def _build_response(biz: Business) -> AIConfigResponse:
 
 
 @router.get(
-    "/business/{business_id}/ai-config",
+    "/superadmin/businesses/{business_id}/ai-config",
     response_model=AIConfigResponse,
 )
 def get_ai_config(
     business_id: int,
-    current: AdminUser = Depends(get_current_user),
+    _: AdminUser = Depends(require_superadmin),
     db: Session = Depends(get_db),
 ):
-    assert_business_write(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -61,16 +60,15 @@ def get_ai_config(
 
 
 @router.patch(
-    "/business/{business_id}/ai-config",
+    "/superadmin/businesses/{business_id}/ai-config",
     response_model=AIConfigResponse,
 )
 def update_ai_config(
     business_id: int,
     data: AIConfigUpdate,
-    current: AdminUser = Depends(get_current_user),
+    _: AdminUser = Depends(require_superadmin),
     db: Session = Depends(get_db),
 ):
-    assert_business_write(current, business_id)
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
@@ -137,13 +135,13 @@ def _price_per_million(v) -> float | None:
         return None
 
 
-@router.get("/ai/openrouter-models", response_model=list[OpenRouterModel])
+@router.get("/superadmin/ai/openrouter-models", response_model=list[OpenRouterModel])
 async def list_openrouter_models(
-    _: AdminUser = Depends(get_current_user),
+    _: AdminUser = Depends(require_superadmin),
 ):
     """List all models available on OpenRouter. Cached in-memory for 1h.
-    Authenticated: any logged-in admin (owner or superadmin) can query this
-    to populate the model dropdown.
+    Superadmin-only: the AI config lives on the platform panel, not on the
+    tenant-side admin.
     """
     now = time.time()
     if now < _openrouter_cache["expires_at"] and _openrouter_cache["data"]:
