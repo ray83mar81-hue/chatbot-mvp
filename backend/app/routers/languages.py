@@ -14,6 +14,7 @@ from app.schemas.language import (
     BusinessLanguagesUpdate,
     LanguageResponse,
 )
+from app.services.ai_service import ALLOWED_LANGUAGE_CODES
 
 router = APIRouter(tags=["languages"])
 
@@ -106,23 +107,37 @@ def update_business_languages(
         raise HTTPException(status_code=404, detail="Business not found")
 
     if data.supported_languages is not None:
-        # Validate every code exists in the catalog and is active
-        valid = {
+        if not data.supported_languages:
+            raise HTTPException(
+                status_code=422,
+                detail="At least one supported language is required",
+            )
+        # Two-layer validation: the code must be in the hardcoded allow-list
+        # (product decision — chatbot quality is tested on those 7) AND it
+        # must exist as an active row in the language catalog.
+        not_allowed = [
+            c for c in data.supported_languages
+            if c not in ALLOWED_LANGUAGE_CODES
+        ]
+        if not_allowed:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Language code(s) not supported by the platform: {not_allowed}. "
+                    f"Allowed codes: {sorted(ALLOWED_LANGUAGE_CODES)}."
+                ),
+            )
+        catalog_codes = {
             row[0]
             for row in db.query(Language.code)
             .filter(Language.is_active.is_(True))
             .all()
         }
-        invalid = [c for c in data.supported_languages if c not in valid]
-        if invalid:
+        missing = [c for c in data.supported_languages if c not in catalog_codes]
+        if missing:
             raise HTTPException(
                 status_code=422,
-                detail=f"Unknown or inactive language codes: {invalid}",
-            )
-        if not data.supported_languages:
-            raise HTTPException(
-                status_code=422,
-                detail="At least one supported language is required",
+                detail=f"Language code(s) not in the active catalog: {missing}",
             )
         business.supported_languages = json.dumps(data.supported_languages)
 

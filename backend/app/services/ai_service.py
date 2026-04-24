@@ -26,6 +26,16 @@ from app.models.business_translation import BusinessTranslation
 from app.models.message import Message
 
 
+# Supported languages for the chatbot. This dict is the single source of
+# truth for (a) the system prompt ("respond in {name}") and (b) the
+# per-tenant language allow-list enforced at the API boundary. To add a new
+# language: append a row here, add a matching row to DEFAULT_LANGUAGES in
+# main.py (with native_name/flag_emoji), and redeploy — that's it.
+#
+# Why this set: target market is Spain + immediate EU neighbours. Mainstream
+# European languages give predictable, high-quality AI output across every
+# model we support. Niche languages (RU/AR/ZH…) would work on some models
+# but are inconsistent and risk embarrassing the client.
 LANGUAGE_NAMES = {
     "es": "Spanish (Español)",
     "en": "English",
@@ -35,6 +45,11 @@ LANGUAGE_NAMES = {
     "it": "Italian (Italiano)",
     "pt": "Portuguese (Português)",
 }
+
+# Allow-list of language codes a tenant is permitted to activate. Frozen so
+# callers can `in`-check without accidental mutation. Derived from the names
+# dict above to guarantee the two stay in sync.
+ALLOWED_LANGUAGE_CODES: frozenset[str] = frozenset(LANGUAGE_NAMES.keys())
 
 
 # ── Per-tenant config resolution ──────────────────────────────────────────

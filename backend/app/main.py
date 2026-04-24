@@ -166,7 +166,10 @@ def _migrate_schema():
                     pass
 
 
-# Default catalog of supported languages.
+# Default catalog of supported languages. Must be a subset of
+# ALLOWED_LANGUAGE_CODES (enforced below) — adding a language requires
+# editing this list AND LANGUAGE_NAMES in ai_service.py so the AI prompt
+# and the admin UI stay in sync.
 DEFAULT_LANGUAGES = [
     {"code": "es", "name": "Spanish",    "native_name": "Español",    "flag_emoji": "🇪🇸", "sort_order": 1},
     {"code": "en", "name": "English",    "native_name": "English",    "flag_emoji": "🇬🇧", "sort_order": 2},
@@ -179,11 +182,25 @@ DEFAULT_LANGUAGES = [
 
 
 def _seed_languages():
-    """Insert the default language catalog. Idempotent — only adds missing rows."""
+    """Insert the default language catalog. Idempotent — only adds missing rows.
+
+    Defensively filters out any code not present in ALLOWED_LANGUAGE_CODES
+    so the seed never creates a catalog entry the API would later reject.
+    """
+    from app.services.ai_service import ALLOWED_LANGUAGE_CODES
+
+    allowed_defaults = [l for l in DEFAULT_LANGUAGES if l["code"] in ALLOWED_LANGUAGE_CODES]
+    if len(allowed_defaults) != len(DEFAULT_LANGUAGES):
+        dropped = [l["code"] for l in DEFAULT_LANGUAGES if l["code"] not in ALLOWED_LANGUAGE_CODES]
+        print(
+            f"[seed-languages] skipped codes missing from ALLOWED_LANGUAGE_CODES: {dropped}. "
+            f"Add them to LANGUAGE_NAMES in ai_service.py first."
+        )
+
     db = SessionLocal()
     try:
         existing_codes = {row[0] for row in db.query(Language.code).all()}
-        for lang in DEFAULT_LANGUAGES:
+        for lang in allowed_defaults:
             if lang["code"] not in existing_codes:
                 db.add(Language(**lang))
         db.commit()
