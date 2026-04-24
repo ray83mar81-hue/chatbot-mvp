@@ -27,3 +27,8 @@ class MeResponse(BaseModel):
     role: str
     tenant_role: str = "owner"
     business_id: int | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str

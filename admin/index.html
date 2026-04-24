@@ -315,6 +315,7 @@
         </div>
       </nav>
       <div class="sidebar-footer">
+        <button onclick="openOwnPasswordModal()" style="display:block;margin-bottom:6px"><span>🔑 Cambiar mi contraseña</span></button>
         <button onclick="handleLogout()"><span>Cerrar sesion</span></button>
       </div>
     </div>
@@ -676,7 +677,7 @@
         </p>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Email</th><th>Rol</th><th></th></tr></thead>
+            <thead><tr><th>Email</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
             <tbody id="teamBody"></tbody>
           </table>
         </div>
@@ -886,6 +887,50 @@
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeInviteModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="submitInvite()">Crear usuario</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Set password for another user (owner only) ═══════ -->
+  <div class="modal-overlay" id="setUserPasswordModal">
+    <div class="modal" style="width:440px">
+      <h3>Cambiar contraseña</h3>
+      <input type="hidden" id="setUserPasswordId" />
+      <p style="color:#6b7280;font-size:13px;margin:8px 0 16px">
+        Estableces una nueva contraseña para <strong id="setUserPasswordEmail">-</strong>. Comunícasela al usuario por un canal seguro — él podrá cambiarla desde "Cambiar mi contraseña" después.
+      </p>
+      <div class="form-group">
+        <label>Nueva contraseña</label>
+        <input id="setUserPasswordValue" type="text" placeholder="mín 8 caracteres" autocomplete="new-password" />
+      </div>
+      <div id="setUserPasswordMsg" style="display:none;margin:12px 0"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeSetUserPasswordModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitSetUserPassword()">Guardar nueva contraseña</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: Change own password (any logged-in user) ═══════ -->
+  <div class="modal-overlay" id="ownPasswordModal">
+    <div class="modal" style="width:440px">
+      <h3>Cambiar mi contraseña</h3>
+      <div class="form-group">
+        <label>Contraseña actual</label>
+        <input id="ownPasswordCurrent" type="password" autocomplete="current-password" />
+      </div>
+      <div class="form-group">
+        <label>Nueva contraseña</label>
+        <input id="ownPasswordNew" type="password" autocomplete="new-password" placeholder="mín 8 caracteres" />
+      </div>
+      <div class="form-group">
+        <label>Repetir nueva contraseña</label>
+        <input id="ownPasswordNewRepeat" type="password" autocomplete="new-password" />
+      </div>
+      <div id="ownPasswordMsg" style="display:none;margin:12px 0"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeOwnPasswordModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitOwnPassword()">Cambiar contraseña</button>
       </div>
     </div>
   </div>
@@ -1329,13 +1374,32 @@
             ? `<span class="badge" style="background:#dbeafe;color:#1e40af">Owner</span>`
             : `<span class="badge" style="background:#f3f4f6;color:#4b5563">Viewer</span>`;
           const selfTag = u.is_self ? ` <span style="color:#9ca3af;font-size:12px">(tú)</span>` : "";
-          const removeBtn = u.is_self
-            ? ""
-            : `<button class="btn btn-danger btn-sm" onclick="removeTeamMember(${u.id}, '${esc(u.email).replace(/'/g,"\\'")}')">Eliminar</button>`;
+          const statusBadge = u.is_active
+            ? `<span class="badge" style="background:#d1fae5;color:#065f46">Activo</span>`
+            : `<span class="badge" style="background:#fee2e2;color:#991b1b">Desactivado</span>`;
+
+          const emailEsc = esc(u.email).replace(/'/g, "\\'");
+          const actions = [];
+          // Password change button (disabled for self — use sidebar "Cambiar mi contraseña")
+          if (!u.is_self) {
+            actions.push(`<button class="btn btn-sm" style="background:#ede9fe;color:#5b21b6" onclick="openSetUserPasswordModal(${u.id}, '${emailEsc}')">🔑 Contraseña</button>`);
+          }
+          // Activate/deactivate (hidden for self)
+          if (!u.is_self) {
+            const label = u.is_active ? "Desactivar" : "Reactivar";
+            const bg = u.is_active ? "#fbbf24" : "#10b981";
+            actions.push(`<button class="btn btn-sm" style="background:${bg};color:#fff" onclick="toggleTeamMemberActive(${u.id}, ${!u.is_active})">${label}</button>`);
+          }
+          // Hard delete (only if self cannot remove themselves)
+          if (!u.is_self) {
+            actions.push(`<button class="btn btn-danger btn-sm" onclick="removeTeamMember(${u.id}, '${emailEsc}')">Eliminar</button>`);
+          }
+
           return `<tr>
             <td><strong>${esc(u.email)}</strong>${selfTag}</td>
             <td>${roleBadge}</td>
-            <td style="text-align:right">${removeBtn}</td>
+            <td>${statusBadge}</td>
+            <td style="text-align:right;white-space:nowrap">${actions.join(" ")}</td>
           </tr>`;
         }).join("");
       } catch (e) {
@@ -1399,6 +1463,129 @@
         await loadTeam();
       } catch (e) {
         alert("Error al eliminar: " + e.message);
+      }
+    }
+
+    async function toggleTeamMemberActive(id, nextActive) {
+      try {
+        const res = await fetch(`${API}/business/${businessId}/admins/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ is_active: nextActive }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        await loadTeam();
+      } catch (e) {
+        alert("Error: " + e.message);
+      }
+    }
+
+    function openSetUserPasswordModal(id, email) {
+      document.getElementById("setUserPasswordId").value = id;
+      document.getElementById("setUserPasswordEmail").textContent = email;
+      document.getElementById("setUserPasswordValue").value = "";
+      document.getElementById("setUserPasswordMsg").style.display = "none";
+      document.getElementById("setUserPasswordModal").classList.add("open");
+    }
+
+    function closeSetUserPasswordModal() {
+      document.getElementById("setUserPasswordModal").classList.remove("open");
+    }
+
+    async function submitSetUserPassword() {
+      const msgEl = document.getElementById("setUserPasswordMsg");
+      msgEl.style.display = "none";
+      const id = document.getElementById("setUserPasswordId").value;
+      const pw = document.getElementById("setUserPasswordValue").value;
+      if (pw.length < 8) {
+        msgEl.textContent = "La contraseña debe tener al menos 8 caracteres.";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      try {
+        const res = await fetch(`${API}/business/${businessId}/admins/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ new_password: pw }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        closeSetUserPasswordModal();
+        alert("Contraseña actualizada. Comunícasela al usuario por un canal seguro.");
+        await loadTeam();
+      } catch (e) {
+        msgEl.textContent = "Error: " + e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
+    }
+
+    /* ── Own password change (any logged-in user) ─────────────── */
+    function openOwnPasswordModal() {
+      document.getElementById("ownPasswordCurrent").value = "";
+      document.getElementById("ownPasswordNew").value = "";
+      document.getElementById("ownPasswordNewRepeat").value = "";
+      document.getElementById("ownPasswordMsg").style.display = "none";
+      document.getElementById("ownPasswordModal").classList.add("open");
+    }
+
+    function closeOwnPasswordModal() {
+      document.getElementById("ownPasswordModal").classList.remove("open");
+    }
+
+    async function submitOwnPassword() {
+      const msgEl = document.getElementById("ownPasswordMsg");
+      msgEl.style.display = "none";
+      const current = document.getElementById("ownPasswordCurrent").value;
+      const next = document.getElementById("ownPasswordNew").value;
+      const nextRepeat = document.getElementById("ownPasswordNewRepeat").value;
+
+      if (!current || !next) {
+        msgEl.textContent = "Rellena ambos campos de contraseña.";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      if (next.length < 8) {
+        msgEl.textContent = "La nueva contraseña debe tener al menos 8 caracteres.";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      if (next !== nextRepeat) {
+        msgEl.textContent = "La nueva contraseña y su repetición no coinciden.";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      if (current === next) {
+        msgEl.textContent = "La nueva contraseña debe ser distinta de la actual.";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      try {
+        const res = await fetch(`${API}/auth/change-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ current_password: current, new_password: next }),
+        });
+        if (!res.ok && res.status !== 204) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.detail || "Error");
+        }
+        closeOwnPasswordModal();
+        alert("Contraseña actualizada. La siguiente vez que inicies sesión usa la nueva contraseña.");
+      } catch (e) {
+        msgEl.textContent = "Error: " + e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
       }
     }
 

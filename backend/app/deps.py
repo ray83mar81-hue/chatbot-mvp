@@ -32,7 +32,10 @@ def get_current_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> AdminUser:
-    """Decode the Bearer token and load the current AdminUser from DB."""
+    """Decode the Bearer token and load the current AdminUser from DB.
+    Deactivated users (is_active=False) are rejected even with a valid
+    token — same 401 as "not authenticated" so the front redirects to login.
+    """
     if not authorization or not authorization.lower().startswith("bearer "):
         raise _UNAUTHORIZED
     token = authorization.split(" ", 1)[1].strip()
@@ -41,7 +44,7 @@ def get_current_user(
     if not sub:
         raise _UNAUTHORIZED
     user = db.query(AdminUser).filter(AdminUser.id == int(sub)).first()
-    if not user:
+    if not user or not bool(user.is_active):
         raise _UNAUTHORIZED
     return user
 

@@ -104,6 +104,9 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "ai_output_price_per_million", "FLOAT"),
     # Fase 5.1: 80% quota warning idempotency flag
     ("businesses", "quota_warning_sent_at", "TIMESTAMP"),
+    # User-management follow-up: soft-disable flag on admin accounts so an
+    # owner can pause access without destroying the user row.
+    ("admin_users", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
 ]
 
 

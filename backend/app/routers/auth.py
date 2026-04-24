@@ -9,7 +9,7 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.admin_user import AdminUser
-from app.schemas.auth import AdminUserCreate, LoginRequest, LoginResponse, MeResponse
+from app.schemas.auth import AdminUserCreate, ChangePasswordRequest, LoginRequest, LoginResponse, MeResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,6 +26,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(AdminUser).filter(AdminUser.email == data.email).first()
     if not user or not bcrypt.checkpw(data.password.encode(), user.password_hash.encode()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not bool(user.is_active):
+        # Same generic 401 so we don't reveal that the email exists.
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = _create_token({
         "sub": str(user.id),
@@ -38,6 +41,27 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         tenant_role=user.tenant_role or "owner",
         business_id=user.business_id,
     )
+
+
+@router.post("/change-password", status_code=204)
+def change_own_password(
+    data: ChangePasswordRequest,
+    current: AdminUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """User changes their own password. Requires the current password as a
+    safety net (stops someone with a stolen session from rotating it).
+    """
+    if not bcrypt.checkpw(data.current_password.encode(), current.password_hash.encode()):
+        raise HTTPException(status_code=401, detail="La contraseña actual no es correcta")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=422, detail="La nueva contraseña debe tener al menos 8 caracteres")
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=422, detail="La nueva contraseña debe ser distinta de la actual")
+
+    current.password_hash = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt()).decode()
+    db.commit()
+    return None
 
 
 @router.post("/register", response_model=LoginResponse)
