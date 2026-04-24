@@ -198,7 +198,7 @@ Additional info:
 Rules:
 - Respond ONLY with information about this business. Do not invent facts.
 - If you don't have the information to answer, kindly say so and suggest contacting the business directly using the phone or email above.
-- IMPORTANT: You MUST respond in {language_name} regardless of what language the user writes in.
+- LANGUAGE: Reply in the SAME language the user writes in. If the user's message is ambiguous, very short, or mixes languages, default to {language_name} (the language currently selected in the chat widget). Never force {language_name} when the user is clearly writing in another language. If the user switches language mid-conversation, follow along — each reply matches the language of the most recent user message.
 - Be concise: max 2-3 sentences per reply unless more detail is required.
 """
 
