@@ -2,6 +2,9 @@
 
 All three checks run before the actual AI call. If any fails, the chat
 engine short-circuits and returns a user-facing message explaining why.
+
+This module also exposes check_quota_warning() used by the chat engine to
+fire an 80%-cuota-reached email once per month before the tenant gets cut.
 """
 import time
 from collections import defaultdict
@@ -11,9 +14,16 @@ from datetime import datetime, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
+from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.conversation import Conversation
 from app.models.message import Message
+
+
+# Percentage of the monthly quota that triggers the warning. Hardcoded for now;
+# move to settings.AI_QUOTA_WARNING_THRESHOLD if we ever need to tune per env.
+QUOTA_WARNING_THRESHOLD = 0.80
 
 
 # Per-session rate limit (in-memory; resets on process restart).
@@ -132,3 +142,59 @@ def check_chat_gate(
     _session_hits[session_id].append(now)
     _business_hits[business.id].append(now)
     return GateResult(ok=True)
+
+
+# ── Quota warning (80% threshold) ─────────────────────────────────────────
+
+
+def check_quota_warning(business: Business, db: Session) -> dict | None:
+    """Return a dict with {used, quota, recipients} if a warning email should
+    fire for this business right now, else None.
+
+    Conditions:
+    - business has a positive monthly_token_quota set
+    - usage this month is >= 80% of that quota
+    - no warning was already sent this month (quota_warning_sent_at is null
+      or predates the current month start)
+
+    The caller is responsible for actually sending the email and then
+    updating business.quota_warning_sent_at to the current UTC time.
+    """
+    quota = business.monthly_token_quota
+    if not quota or quota <= 0:
+        return None
+
+    used = tokens_used_this_month(db, business.id)
+    if used < quota * QUOTA_WARNING_THRESHOLD:
+        return None
+
+    month_start = _month_start_utc()
+    sent_at = business.quota_warning_sent_at
+    if sent_at is not None:
+        # Normalize to timezone-aware UTC for comparison (column is naive
+        # when stored by SQLite; PostgreSQL returns aware).
+        if sent_at.tzinfo is None:
+            sent_at = sent_at.replace(tzinfo=timezone.utc)
+        if sent_at >= month_start:
+            return None  # already warned this month
+
+    # Recipients: all client_admin OWNERS of the tenant + the configured
+    # platform superadmin email (if any).
+    owner_emails = [
+        email for (email,) in (
+            db.query(AdminUser.email)
+            .filter(
+                AdminUser.business_id == business.id,
+                AdminUser.role == "client_admin",
+                AdminUser.tenant_role == "owner",
+            )
+            .all()
+        ) if email
+    ]
+    recipients = list(dict.fromkeys(owner_emails + (
+        [settings.SUPERADMIN_EMAIL] if settings.SUPERADMIN_EMAIL else []
+    )))
+    if not recipients:
+        return None
+
+    return {"used": used, "quota": quota, "recipients": recipients}

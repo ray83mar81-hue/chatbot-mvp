@@ -6,6 +6,7 @@ this path — they're rendered by the widget on its own.
 """
 import json as _json
 import time
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -14,8 +15,31 @@ from app.models.conversation import Conversation
 from app.models.message import Message
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.ai_service import AIError, ai_fallback_message, generate_ai_response, stream_ai_response
-from app.services.chat_limits import check_chat_gate
+from app.services.chat_limits import check_chat_gate, check_quota_warning
 from app.services.incident_service import log as log_incident
+from app.services.notification_service import send_quota_warning
+
+
+def _maybe_fire_quota_warning(business: Business, db: Session) -> None:
+    """Fire-and-forget quota warning email at the 80% threshold, once per
+    month per tenant. Errors are swallowed — never let a warning failure
+    affect the chat response path.
+    """
+    try:
+        action = check_quota_warning(business, db)
+        if not action:
+            return
+        ok = send_quota_warning(
+            business=business,
+            used=action["used"],
+            quota=action["quota"],
+            to_emails=action["recipients"],
+        )
+        if ok:
+            business.quota_warning_sent_at = datetime.now(timezone.utc)
+            db.commit()
+    except Exception as e:
+        print(f"[quota-warning] skipped for business {business.id}: {type(e).__name__}: {e}")
 
 
 def _resolve_language(request_lang: str | None, business: Business) -> str:
@@ -75,6 +99,11 @@ async def process_message(request: ChatRequest, db: Session) -> ChatResponse:
             session_id=request.session_id,
             language=language,
         )
+
+    # Fire the 80% quota warning BEFORE consuming more tokens on this request,
+    # so the threshold email reaches the admin at "about to hit the ceiling",
+    # not after the chat already returned a canned message.
+    _maybe_fire_quota_warning(business, db)
 
     conversation = _get_or_create_conversation(
         db, request.session_id, request.business_id, language
@@ -154,6 +183,8 @@ async def process_message_stream(request: ChatRequest, db: Session):
         yield f"data: {_json.dumps({'type': 'chunk', 'content': gate.message or ''})}\n\n"
         yield f"data: {_json.dumps({'type': 'end'})}\n\n"
         return
+
+    _maybe_fire_quota_warning(business, db)
 
     conversation = _get_or_create_conversation(db, request.session_id, request.business_id, language)
 

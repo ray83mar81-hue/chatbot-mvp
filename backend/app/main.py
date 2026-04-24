@@ -102,6 +102,8 @@ SCHEMA_MIGRATIONS = [
     ("businesses", "ai_base_url", "VARCHAR(500)"),
     ("businesses", "ai_input_price_per_million", "FLOAT"),
     ("businesses", "ai_output_price_per_million", "FLOAT"),
+    # Fase 5.1: 80% quota warning idempotency flag
+    ("businesses", "quota_warning_sent_at", "TIMESTAMP"),
 ]
 
 

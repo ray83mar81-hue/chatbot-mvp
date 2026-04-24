@@ -37,6 +37,11 @@ class Business(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     # Monthly token cap for this tenant (NULL = unlimited). Superadmin sets this.
     monthly_token_quota = Column(Integer, nullable=True)
+    # Timestamp of the last "80% of quota reached" warning email fired for
+    # this tenant. Used to avoid spamming once the warning threshold is
+    # crossed; compared against the current month start to auto-reset each
+    # month (a cleared or <month_start value re-enables the warning).
+    quota_warning_sent_at = Column(DateTime, nullable=True)
 
     # Per-tenant AI configuration (superadmin-managed by default; tenant owners
     # may override from their admin if they bring their own API key).
