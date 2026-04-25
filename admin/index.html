@@ -2390,16 +2390,17 @@
         const lang = (conv.language_code || "es").toUpperCase();
         document.getElementById("convLangBadge").textContent = lang;
 
+        // Translate button is always available now: even when the flag was
+        // the default language, the customer may have written in a different
+        // language (the AI matches the user's language since the
+        // reply-in-user-language change). Letting the admin translate any
+        // conversation, even ES→ES (no-op cost), is simpler than guessing.
         const defaultLang = (bizDataState.defaultLang || "es");
         const btn = document.getElementById("convTranslateBtn");
-        if (conv.language_code && conv.language_code !== defaultLang) {
-          btn.style.display = "inline-flex";
-          btn.disabled = false;
-          btn.innerHTML = `Traducir a ${defaultLang.toUpperCase()}`;
-          btn.dataset.mode = "translate";
-        } else {
-          btn.style.display = "none";
-        }
+        btn.style.display = "inline-flex";
+        btn.disabled = false;
+        btn.innerHTML = `Traducir a ${defaultLang.toUpperCase()}`;
+        btn.dataset.mode = "translate";
 
         renderConvMessages(conv.messages, false);
         document.getElementById("convModal").classList.add("open");
