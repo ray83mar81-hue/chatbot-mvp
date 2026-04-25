@@ -293,11 +293,6 @@ Cuando cierres una venta, **explica esto explícitamente** y refléjalo en el ac
 
 > *"El plan Básico incluye 1000 mensajes de IA al mes. Si los superas, el chat se pausa automáticamente hasta el mes siguiente, aunque los botones (llamar, mapa, etc.) y el formulario de contacto siguen activos. Te avisaremos por email cuando llegues al 80% de tu cuota para que podamos subirte de plan o añadir un pack extra antes del corte."*
 
-### ⚠️ Pendiente de implementar (conocido)
-
-- **Aviso automático por email al 80-90% de cuota.** Hoy el operador tiene que revisar el panel para verlo. Sin aviso proactivo, un cliente puede llegar al corte sin margen para ampliar. **Prioridad alta antes de vender al primer cliente real.**
-- **Log de histórico de cortes por cuota.** Ayudaría a identificar clientes que recurrentemente agotan cuota — candidatos naturales a upgrade de plan.
-
 ---
 
 ## 11. Cosas a decidir antes del primer cliente de pago
@@ -311,4 +306,23 @@ Cuando cierres una venta, **explica esto explícitamente** y refléjalo en el ac
 
 ---
 
-**Última actualización:** 2026-04-23. Revisar cada 3-6 meses o cuando cambien precios de los modelos de IA. Si los tiers no convierten en 3 meses, bajar precio del Básico a 29 €/mes (probado suele mover conversión) antes de añadir más features.
+## 12. Mejoras técnicas pendientes (volver cuando haya volumen)
+
+Lista priorizada de mejoras conocidas. **Ninguna bloquea vender** al primer cliente, pero conviene atacarlas según el sistema crezca.
+
+### 🔴 Alta — antes de cliente real con datos sensibles
+- **Encriptar API keys en BD.** Hoy se guardan plaintext en `businesses.ai_api_key` (con masking en GET). Si alguien hace `pg_dump` o accede a la DB, las ve. Solución: añadir dependencia `cryptography`, columna encriptada con Fernet, env `AI_KEY_ENCRYPTION_SECRET`. ~1h.
+
+### 🟡 Media — cuando empieces a tener tráfico real
+- **Cachear traducciones de conversaciones.** Hoy cada vez que el admin pulsa "Traducir conversación" se hace una llamada nueva a la IA, aunque la conversación ya se hubiera traducido antes. Coste por traducción: ~$0.001 (despreciable a poco volumen). Solución: tabla `conversation_translations(conversation_id, target_lang, translated_messages_json, created_at)`, lookup antes de llamar a la IA. ~1.5h. **Hacer cuando notes que se traduce mucho la misma conversación.**
+- **Histórico de cortes por cuota.** Loggear en `incidents` cuándo un tenant choca con el 100% de su cuota. Sirve para identificar clientes que recurrentemente agotan cuota → candidatos a upgrade. ~30 min.
+- **Audit log de cambios sensibles.** Quién cambió la cuota / API key / modelo / desactivó usuario. Útil para soporte y compliance. Tabla `audit_log(actor_id, action, target, before_value, after_value, created_at)`. ~2h.
+
+### 🟢 Baja — nice-to-have a medio plazo
+- **Stripe Billing / Redsys automatizado.** Reemplazar la facturación manual por suscripción con cobro recurrente, fin de trial automático, etc. Cuando tengas 5+ clientes pagando, la factura manual se vuelve insostenible. ~1-2 días.
+- **Auto-upgrade de plan al rebasar cuota.** Si un tenant llega al 100%, ofrecerle upgrade en el widget admin con un click + cobro inmediato. Requiere Stripe Billing primero. ~1 día.
+- **Dashboard global del superadmin con coste real por cliente.** Hoy el cálculo de coste cruzado en `/superadmin/stats` usa los precios globales del env, no los precios reales por tenant. Refactor para sumar per-tenant. ~2h.
+
+---
+
+**Última actualización:** 2026-04-25. Revisar cada 3-6 meses o cuando cambien precios de los modelos de IA. Si los tiers no convierten en 3 meses, bajar precio del Básico a 29 €/mes (probado suele mover conversión) antes de añadir más features.
