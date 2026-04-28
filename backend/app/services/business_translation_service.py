@@ -31,6 +31,7 @@ Source content:
 - extra_info (additional info for customers): {json.dumps(source["extra_info"], ensure_ascii=False)}
 - welcome (greeting message shown when chat opens): {json.dumps(source["welcome"], ensure_ascii=False)}
 - contact_texts (contact form labels, JSON object with short UI strings): {json.dumps(source["contact_texts"], ensure_ascii=False)}
+- faqs (frequently asked questions, JSON array of {{q, a}} pairs): {json.dumps(source["faqs"], ensure_ascii=False)}
 
 Rules:
 - Translate naturally and idiomatically.
@@ -39,6 +40,7 @@ Rules:
 - The business name should generally stay the same unless it has an established localized variant.
 - For schedule: translate the day names (e.g. "lunes" → "Monday") but keep the hours unchanged. Keep it as a valid JSON string.
 - For contact_texts: translate EACH value inside the object. Keep the keys unchanged. Return it as a valid JSON string (quoted). These are short UI labels: keep them concise and idiomatic.
+- For faqs: translate BOTH the q (question) and a (answer) of each item. Keep the array length and order. Return as a valid JSON array of objects with the same shape: [{{"q": "...", "a": "..."}}, ...]. If the source has 0 items, return [].
 - Output ONLY a JSON object, no markdown fences.
 
 Output schema:
@@ -50,7 +52,8 @@ Output schema:
     "schedule": "...",
     "extra_info": "...",
     "welcome": "...",
-    "contact_texts": "..."
+    "contact_texts": "...",
+    "faqs": [{{"q": "...", "a": "..."}}]
   }}
 }}
 """
@@ -95,10 +98,17 @@ async def translate_business(
         .first()
     )
     if src_row:
+        try:
+            src_faqs = json.loads(src_row.faqs_json or "[]")
+            if not isinstance(src_faqs, list):
+                src_faqs = []
+        except (json.JSONDecodeError, TypeError):
+            src_faqs = []
         source = {"name": src_row.name, "description": src_row.description,
                   "address": src_row.address, "schedule": src_row.schedule or "{}",
                   "extra_info": src_row.extra_info, "welcome": src_row.welcome or "",
-                  "contact_texts": src_row.contact_texts or "{}"}
+                  "contact_texts": src_row.contact_texts or "{}",
+                  "faqs": src_faqs}
         src_privacy_url = src_row.privacy_url or ""
     else:
         # Fallback: get welcome from welcome_messages JSON on the business
@@ -111,7 +121,8 @@ async def translate_business(
                   "address": business.address, "schedule": business.schedule or "{}",
                   "extra_info": business.extra_info,
                   "welcome": welcomes.get(source_language_code, ""),
-                  "contact_texts": "{}"}
+                  "contact_texts": "{}",
+                  "faqs": []}
         src_privacy_url = ""
 
     prompt = _build_prompt(
@@ -158,6 +169,27 @@ async def translate_business(
             except Exception:
                 ct_str = source["contact_texts"] or "{}"
 
+        # Translated FAQs: AI may return a list of dicts directly (correct)
+        # or a JSON-encoded string. Validate, drop malformed entries, and
+        # store as a clean JSON string. Falls back to "[]" on any failure.
+        raw_faqs = entry.get("faqs")
+        if isinstance(raw_faqs, str):
+            try:
+                raw_faqs = json.loads(raw_faqs)
+            except json.JSONDecodeError:
+                raw_faqs = []
+        if not isinstance(raw_faqs, list):
+            raw_faqs = []
+        clean_faqs: list[dict] = []
+        for item in raw_faqs:
+            if not isinstance(item, dict):
+                continue
+            q = str(item.get("q") or "").strip()
+            a = str(item.get("a") or "").strip()
+            if q:
+                clean_faqs.append({"q": q, "a": a})
+        faqs_str = json.dumps(clean_faqs, ensure_ascii=False)
+
         new_data = {
             "name": str(entry.get("name") or "").strip(),
             "description": str(entry.get("description") or "").strip(),
@@ -166,6 +198,7 @@ async def translate_business(
             "extra_info": str(entry.get("extra_info") or "").strip(),
             "welcome": str(entry.get("welcome") or "").strip(),
             "contact_texts": ct_str,
+            "faqs_json": faqs_str,
         }
 
         if existing:

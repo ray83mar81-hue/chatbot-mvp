@@ -162,6 +162,22 @@ def _get_localized_fields(db: Session, business: Business, language: str) -> dic
         v = (tr_val or "").strip()
         return v if v else (base_val or "")
 
+    # Parse FAQ list (no fallback to base — FAQs only exist per language).
+    faqs: list[dict] = []
+    if translation and translation.faqs_json:
+        try:
+            raw = json.loads(translation.faqs_json)
+            if isinstance(raw, list):
+                for entry in raw:
+                    if not isinstance(entry, dict):
+                        continue
+                    q = str(entry.get("q") or "").strip()
+                    a = str(entry.get("a") or "").strip()
+                    if q:
+                        faqs.append({"q": q, "a": a})
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return {
         "name":        pick(translation.name        if translation else None, business.name),
         "description": pick(translation.description if translation else None, business.description),
@@ -170,6 +186,7 @@ def _get_localized_fields(db: Session, business: Business, language: str) -> dic
         "extra_info":  pick(translation.extra_info  if translation else None, business.extra_info),
         "phone": business.phone or "",
         "email": business.email or "",
+        "faqs": faqs,
     }
 
 
@@ -182,6 +199,15 @@ def _build_system_prompt(fields: dict, language: str) -> str:
 
     language_name = LANGUAGE_NAMES.get(language, language)
 
+    faqs = fields.get("faqs") or []
+    if faqs:
+        faqs_block = "\n".join(
+            f"- Q: {item['q']}\n  A: {item['a']}" for item in faqs if item.get("q")
+        )
+        faqs_section = f"\n\nFrequently asked questions (use these answers when the user asks something matching, paraphrasing if helpful):\n{faqs_block}"
+    else:
+        faqs_section = ""
+
     return f"""You are the virtual assistant of "{fields['name']}". Your role is to help customers with their questions in a friendly, professional and concise way.
 
 Business information:
@@ -193,7 +219,7 @@ Business information:
 - Schedule: {schedule_formatted}
 
 Additional info:
-{fields['extra_info']}
+{fields['extra_info']}{faqs_section}
 
 Rules:
 - Respond ONLY with information about this business. Do not invent facts.

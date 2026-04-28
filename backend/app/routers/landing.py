@@ -273,6 +273,21 @@ def _get_translation(business: Business, lang: str, db: Session) -> dict:
         .filter_by(business_id=business.id, language_code=lang)
         .first()
     )
+    faqs: list[dict] = []
+    if t and t.faqs_json:
+        try:
+            raw = json.loads(t.faqs_json)
+            if isinstance(raw, list):
+                for entry in raw:
+                    if not isinstance(entry, dict):
+                        continue
+                    q = str(entry.get("q") or "").strip()
+                    a = str(entry.get("a") or "").strip()
+                    if q:
+                        faqs.append({"q": q, "a": a})
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     if t:
         return {
             "name": t.name or business.name or "",
@@ -281,6 +296,7 @@ def _get_translation(business: Business, lang: str, db: Session) -> dict:
             "schedule": t.schedule or business.schedule or "{}",
             "extra_info": t.extra_info or business.extra_info or "",
             "welcome": t.welcome or "",
+            "faqs": faqs,
         }
     return {
         "name": business.name or "",
@@ -289,6 +305,7 @@ def _get_translation(business: Business, lang: str, db: Session) -> dict:
         "schedule": business.schedule or "{}",
         "extra_info": business.extra_info or "",
         "welcome": "",
+        "faqs": faqs,
     }
 
 
@@ -327,6 +344,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Chatear con nosotros",
         "share": "Compartir", "share_copied": "Enlace copiado",
         "powered": "Este negocio usa Chatbot MVP",
+        "faqs": "Preguntas frecuentes",
     },
     "en": {
         "contact": "Contact", "schedule": "Hours", "address": "Address",
@@ -334,6 +352,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Chat with us",
         "share": "Share", "share_copied": "Link copied",
         "powered": "This business uses Chatbot MVP",
+        "faqs": "Frequently asked questions",
     },
     "ca": {
         "contact": "Contacte", "schedule": "Horaris", "address": "Adreça",
@@ -341,6 +360,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Xateja amb nosaltres",
         "share": "Compartir", "share_copied": "Enllaç copiat",
         "powered": "Aquest negoci fa servir Chatbot MVP",
+        "faqs": "Preguntes freqüents",
     },
     "fr": {
         "contact": "Contact", "schedule": "Horaires", "address": "Adresse",
@@ -348,6 +368,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Discuter avec nous",
         "share": "Partager", "share_copied": "Lien copié",
         "powered": "Cette entreprise utilise Chatbot MVP",
+        "faqs": "Questions fréquentes",
     },
     "de": {
         "contact": "Kontakt", "schedule": "Öffnungszeiten", "address": "Adresse",
@@ -355,6 +376,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Mit uns chatten",
         "share": "Teilen", "share_copied": "Link kopiert",
         "powered": "Dieses Unternehmen nutzt Chatbot MVP",
+        "faqs": "Häufig gestellte Fragen",
     },
     "it": {
         "contact": "Contatti", "schedule": "Orari", "address": "Indirizzo",
@@ -362,6 +384,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Chatta con noi",
         "share": "Condividi", "share_copied": "Link copiato",
         "powered": "Questa attività usa Chatbot MVP",
+        "faqs": "Domande frequenti",
     },
     "pt": {
         "contact": "Contacto", "schedule": "Horários", "address": "Morada",
@@ -369,6 +392,7 @@ LABELS = {
         "whatsapp": "WhatsApp", "chat_cta": "Fala connosco",
         "share": "Partilhar", "share_copied": "Link copiado",
         "powered": "Este negócio usa Chatbot MVP",
+        "faqs": "Perguntas frequentes",
     },
 }
 
@@ -405,6 +429,14 @@ def _theme_css(theme: str, color: str) -> str:
     .lang-switcher a {{ padding: 4px 10px; color: #9ca3af; text-decoration: none; font-size: 11px; letter-spacing: 0.1em; }}
     .lang-switcher a.active {{ color: {color}; }}
     footer {{ text-align: center; padding: 40px 24px; color: #6b7280; font-size: 12px; font-family: -apple-system, sans-serif; border-top: 1px solid #374151; }}
+    .faq-list {{ display: flex; flex-direction: column; gap: 8px; }}
+    .faq-item {{ border: 1px solid #374151; border-radius: 2px; overflow: hidden; }}
+    .faq-item summary {{ cursor: pointer; padding: 14px 18px; font-weight: 400; color: #fff; list-style: none; font-family: -apple-system, sans-serif; font-size: 15px; }}
+    .faq-item summary::-webkit-details-marker {{ display: none; }}
+    .faq-item summary::before {{ content: "+"; display: inline-block; margin-right: 12px; color: {color}; }}
+    .faq-item[open] summary::before {{ content: "−"; }}
+    .faq-item[open] summary {{ background: rgba(255,255,255,.03); border-bottom: 1px solid #374151; }}
+    .faq-answer {{ padding: 16px 18px; color: #d1d5db; }}
 """
     if theme == "minimal":
         # Black & white, typographic, lots of whitespace. Brand color as single accent.
@@ -435,6 +467,14 @@ def _theme_css(theme: str, color: str) -> str:
     .lang-switcher a {{ padding: 6px 12px; color: #737373; text-decoration: none; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; border: 1px solid transparent; }}
     .lang-switcher a.active {{ color: #000; border-color: #000; }}
     footer {{ text-align: center; padding: 40px 24px; color: #737373; font-size: 13px; border-top: 1px solid #000; }}
+    .faq-list {{ display: flex; flex-direction: column; }}
+    .faq-item {{ border-bottom: 1px solid #000; }}
+    .faq-item:first-child {{ border-top: 1px solid #000; }}
+    .faq-item summary {{ cursor: pointer; padding: 20px 0; font-weight: 700; font-size: 18px; list-style: none; }}
+    .faq-item summary::-webkit-details-marker {{ display: none; }}
+    .faq-item summary::before {{ content: "+ "; color: {color}; font-weight: 900; }}
+    .faq-item[open] summary::before {{ content: "− "; }}
+    .faq-answer {{ padding: 0 0 20px; font-size: 16px; color: #525252; }}
 """
     if theme == "warm":
         # Rounded, soft pastel tones, friendly illustrative feel.
@@ -467,6 +507,14 @@ def _theme_css(theme: str, color: str) -> str:
     .lang-switcher a {{ padding: 4px 12px; color: #3d3a4e; text-decoration: none; font-size: 12px; font-weight: 700; border-radius: 999px; }}
     .lang-switcher a.active {{ background: {color}; color: #fff; }}
     footer {{ text-align: center; padding: 30px 24px; color: #6b7280; font-size: 13px; }}
+    .faq-list {{ display: flex; flex-direction: column; gap: 12px; }}
+    .faq-item {{ background: #fef6e4; border: 2px solid #001858; border-radius: 16px; overflow: hidden; }}
+    .faq-item summary {{ cursor: pointer; padding: 14px 20px; font-weight: 700; color: #001858; list-style: none; }}
+    .faq-item summary::-webkit-details-marker {{ display: none; }}
+    .faq-item summary::before {{ content: "▶"; display: inline-block; margin-right: 10px; color: {color}; font-size: 11px; transition: transform .2s; }}
+    .faq-item[open] summary::before {{ transform: rotate(90deg); }}
+    .faq-item[open] summary {{ background: #fff; }}
+    .faq-answer {{ padding: 0 20px 16px; color: #3d3a4e; background: #fff; }}
 """
     # "clean" (default)
     return f"""
@@ -496,6 +544,14 @@ def _theme_css(theme: str, color: str) -> str:
     .lang-switcher a.active {{ background: rgba(255,255,255,.3); }}
     footer {{ text-align: center; padding: 32px 24px; color: #9ca3af; font-size: 13px; }}
     footer a {{ color: inherit; }}
+    .faq-list {{ display: flex; flex-direction: column; gap: 8px; }}
+    .faq-item {{ border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #fff; }}
+    .faq-item summary {{ cursor: pointer; padding: 14px 16px; font-weight: 600; color: #111827; list-style: none; }}
+    .faq-item summary::-webkit-details-marker {{ display: none; }}
+    .faq-item summary::before {{ content: "▶"; display: inline-block; margin-right: 10px; color: {color}; font-size: 11px; transition: transform .2s; }}
+    .faq-item[open] summary::before {{ transform: rotate(90deg); }}
+    .faq-item[open] summary {{ background: #f9fafb; border-bottom: 1px solid #e5e7eb; }}
+    .faq-answer {{ padding: 14px 16px; color: #4b5563; }}
     @media (max-width: 600px) {{
       .hero {{ padding: 60px 16px 40px; }}
       main {{ padding: 0 16px; margin-top: -24px; }}
@@ -539,6 +595,19 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
         <section class="card">
             <h2>{_esc(labels["more"])}</h2>
             <div class="prose">{_render_markdown_lite(t["extra_info"])}</div>
+        </section>'''
+
+    faqs_block = ""
+    faqs_list = t.get("faqs") or []
+    if faqs_list:
+        items_html = "".join(
+            f'''<details class="faq-item"><summary>{_esc(item["q"])}</summary><div class="faq-answer">{_render_markdown_lite(item["a"])}</div></details>'''
+            for item in faqs_list if item.get("q")
+        )
+        faqs_block = f'''
+        <section class="card">
+            <h2>{_esc(labels["faqs"])}</h2>
+            <div class="faq-list">{items_html}</div>
         </section>'''
 
     map_block = ""
@@ -651,6 +720,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
     {'<section class="card"><h2>' + _esc(labels["schedule"]) + '</h2><ul class="schedule">' + schedule_items + '</ul></section>' if schedule_items else ''}
 
     {extra_block}
+    {faqs_block}
   </main>
 
   <footer>

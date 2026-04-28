@@ -47,6 +47,12 @@ class BusinessTranslation(Base):
     privacy_url = Column(String(500), default="")
     contact_texts = Column(Text, default="{}")  # JSON overrides for widget I18N keys
 
+    # Frequently Asked Questions, per-language. JSON list of {q, a} pairs:
+    # [{"q": "¿A qué hora abrís?", "a": "Lunes a viernes 9-18..."}, ...].
+    # Rendered as a collapsible accordion on the public landing and injected
+    # into the AI system prompt as a structured FAQ block.
+    faqs_json = Column(Text, default="[]")
+
     # Translation provenance
     auto_translated = Column(Boolean, default=False)
     needs_review = Column(Boolean, default=False)

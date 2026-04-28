@@ -475,6 +475,7 @@
         <!-- Sub-tabs -->
         <div class="lang-tabs" id="bizSubTabs" style="margin-bottom:20px">
           <button type="button" class="lang-tab active" data-biztab="datos" onclick="switchBizTab('datos')">Datos del negocio</button>
+          <button type="button" class="lang-tab" data-biztab="faqs" onclick="switchBizTab('faqs')">FAQs</button>
           <button type="button" class="lang-tab" data-biztab="idiomas" onclick="switchBizTab('idiomas')">Idiomas</button>
           <button type="button" class="lang-tab" data-biztab="widget" onclick="switchBizTab('widget')">Widget</button>
           <button type="button" class="lang-tab" data-biztab="contacto" onclick="switchBizTab('contacto')">Formulario de contacto</button>
@@ -508,6 +509,23 @@
 
             <div id="bizMsg" style="display:none"></div>
             <button class="btn btn-primary" style="margin-top:12px" onclick="saveBusiness()">Guardar cambios</button>
+          </div>
+        </div>
+
+        <!-- Sub-tab: FAQs -->
+        <div class="biz-pane" id="bizPane-faqs">
+          <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.05);max-width:880px">
+            <p style="font-size:13px;color:#6b7280;margin-bottom:8px">
+              Preguntas frecuentes que tus clientes hacen. Aparecen en tu <strong>página pública</strong> como acordeón desplegable y la IA las usa para responder mejor en el chat.
+            </p>
+            <p style="font-size:13px;color:#6b7280;margin-bottom:20px">
+              Edita las traducciones de cada idioma en su pestaña. Para traducir todas a la vez, usa "Traducir con IA" en la pestaña <strong>Idiomas</strong>.
+            </p>
+
+            <div class="lang-tabs" id="faqsLangTabs"></div>
+            <div id="faqsLangPanes"></div>
+
+            <div id="faqsMsg" style="display:none;margin-top:12px"></div>
           </div>
         </div>
 
@@ -887,6 +905,31 @@
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeInviteModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="submitInvite()">Crear usuario</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODAL: FAQ edit/create (Negocio › FAQs) ═══════ -->
+  <div class="modal-overlay" id="faqModal">
+    <div class="modal" style="width:560px">
+      <h3 id="faqModalTitle">Nueva pregunta</h3>
+      <input type="hidden" id="faqEditLang" />
+      <input type="hidden" id="faqEditIndex" />
+
+      <div class="form-group">
+        <label>Pregunta</label>
+        <input id="faqQuestion" placeholder="¿A qué hora abrís?" maxlength="500" />
+      </div>
+      <div class="form-group">
+        <label>Respuesta</label>
+        <textarea id="faqAnswer" rows="5" placeholder="Escribe la respuesta tal y como quieres que la lean tus clientes." maxlength="4000"></textarea>
+        <p class="md-hint">Acepta saltos de línea y formato básico (negrita con <code>**texto**</code>, listas con <code>-</code>).</p>
+      </div>
+
+      <div id="faqEditMsg" style="display:none;margin:12px 0"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeFaqModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitFaqModal()">Guardar pregunta</button>
       </div>
     </div>
   </div>
@@ -2475,6 +2518,212 @@
         p.classList.toggle("active", p.id === "bizPane-" + tab);
       });
       if (tab === "web") loadLandingSettings();
+      if (tab === "faqs") loadFaqsTab();
+    }
+
+    /* ════════════════════════════════════════════════
+       FAQs subtab — per-language CRUD with auto-save
+       ════════════════════════════════════════════════ */
+    const faqsState = {
+      translations: {},   // {lang_code: [{q, a}, ...]}
+      currentTab: null,
+      langs: [],          // [{code, native_name, flag_emoji}, ...]
+      defaultLang: "es",
+      loaded: new Set(),  // language codes already fetched from backend
+    };
+
+    async function loadFaqsTab() {
+      // Reuse the language catalog already loaded for the business.
+      await ensureBusinessLangsLoaded();
+      faqsState.langs = (bizLangState.catalog || []).filter(l =>
+        bizLangState.supported.includes(l.code)
+      );
+      faqsState.defaultLang = bizLangState.defaultLang || "es";
+      if (!faqsState.langs.length) {
+        faqsState.langs = [{ code: "es", native_name: "Español", flag_emoji: "🇪🇸" }];
+      }
+      if (!faqsState.currentTab || !faqsState.langs.find(l => l.code === faqsState.currentTab)) {
+        faqsState.currentTab = faqsState.defaultLang;
+      }
+      renderFaqsTabs();
+      await ensureFaqsLoadedForLang(faqsState.currentTab);
+      renderFaqsList(faqsState.currentTab);
+    }
+
+    function renderFaqsTabs() {
+      const tabsEl = document.getElementById("faqsLangTabs");
+      const panesEl = document.getElementById("faqsLangPanes");
+      if (!tabsEl || !panesEl) return;
+
+      tabsEl.innerHTML = faqsState.langs.map(l => {
+        const flag = l.flag_emoji || "";
+        const isActive = l.code === faqsState.currentTab;
+        return `<button type="button" class="lang-tab${isActive ? " active" : ""}" onclick="switchFaqsLang('${l.code}')">${flag} ${esc(l.code.toUpperCase())}</button>`;
+      }).join("");
+
+      panesEl.innerHTML = faqsState.langs.map(l => `
+        <div class="lang-pane${l.code === faqsState.currentTab ? " active" : ""}" data-lang="${l.code}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong style="color:#374151">Idioma: ${esc(l.native_name || l.code.toUpperCase())}</strong>
+            <button class="btn btn-primary btn-sm" onclick="openFaqModal('${l.code}')">+ Nueva pregunta</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th style="width:50%">Pregunta</th><th>Respuesta</th><th style="width:140px;text-align:right">Acciones</th></tr></thead>
+              <tbody class="faqs-tbody" data-lang="${l.code}"></tbody>
+            </table>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    async function switchFaqsLang(code) {
+      faqsState.currentTab = code;
+      // Toggle active class on tabs and panes
+      document.querySelectorAll("#faqsLangTabs .lang-tab").forEach(t => {
+        t.classList.toggle("active", t.textContent.trim().endsWith(code.toUpperCase()));
+      });
+      document.querySelectorAll("#faqsLangPanes .lang-pane").forEach(p => {
+        p.classList.toggle("active", p.dataset.lang === code);
+      });
+      await ensureFaqsLoadedForLang(code);
+      renderFaqsList(code);
+    }
+
+    async function ensureFaqsLoadedForLang(code) {
+      if (faqsState.loaded.has(code)) return;
+      try {
+        const res = await fetch(`${API}/business/${businessId}/faqs/${code}`);
+        if (!res.ok) throw new Error("Error cargando FAQs");
+        const data = await res.json();
+        faqsState.translations[code] = (data.items || []).map(it => ({ q: it.q || "", a: it.a || "" }));
+        faqsState.loaded.add(code);
+      } catch (e) {
+        console.error("loadFaqs", e);
+        faqsState.translations[code] = [];
+      }
+    }
+
+    function renderFaqsList(code) {
+      const tbody = document.querySelector(`.faqs-tbody[data-lang="${code}"]`);
+      if (!tbody) return;
+      const list = faqsState.translations[code] || [];
+      if (!list.length) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:32px">No hay preguntas todavía. Pulsa <strong>+ Nueva pregunta</strong> para añadir la primera.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = list.map((item, idx) => {
+        const qShort = (item.q || "").length > 80 ? esc(item.q.slice(0, 80)) + "…" : esc(item.q || "");
+        const aShort = (item.a || "").replace(/\n/g, " ").slice(0, 120);
+        return `<tr>
+          <td><strong>${qShort}</strong></td>
+          <td style="color:#6b7280;font-size:13px">${esc(aShort)}${item.a && item.a.length > 120 ? "…" : ""}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-sm" title="Subir" onclick="moveFaq('${code}', ${idx}, -1)" ${idx === 0 ? "disabled" : ""}>↑</button>
+            <button class="btn btn-sm" title="Bajar" onclick="moveFaq('${code}', ${idx}, 1)" ${idx === list.length - 1 ? "disabled" : ""}>↓</button>
+            <button class="btn btn-sm" onclick="openFaqModal('${code}', ${idx})">Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="removeFaq('${code}', ${idx})">Borrar</button>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+
+    function openFaqModal(code, index) {
+      faqsState.translations[code] = faqsState.translations[code] || [];
+      const editing = (typeof index === "number");
+      document.getElementById("faqModalTitle").textContent = editing ? "Editar pregunta" : "Nueva pregunta";
+      document.getElementById("faqEditLang").value = code;
+      document.getElementById("faqEditIndex").value = editing ? String(index) : "";
+      const item = editing ? (faqsState.translations[code][index] || { q: "", a: "" }) : { q: "", a: "" };
+      document.getElementById("faqQuestion").value = item.q || "";
+      document.getElementById("faqAnswer").value = item.a || "";
+      document.getElementById("faqEditMsg").style.display = "none";
+      document.getElementById("faqModal").classList.add("open");
+    }
+
+    function closeFaqModal() {
+      document.getElementById("faqModal").classList.remove("open");
+    }
+
+    async function submitFaqModal() {
+      const msgEl = document.getElementById("faqEditMsg");
+      msgEl.style.display = "none";
+      const code = document.getElementById("faqEditLang").value;
+      const idxRaw = document.getElementById("faqEditIndex").value;
+      const q = (document.getElementById("faqQuestion").value || "").trim();
+      const a = (document.getElementById("faqAnswer").value || "").trim();
+
+      if (!q) {
+        msgEl.textContent = "La pregunta no puede estar vacía.";
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+        return;
+      }
+      const list = faqsState.translations[code] || [];
+      if (idxRaw === "") {
+        list.push({ q, a });
+      } else {
+        const i = parseInt(idxRaw, 10);
+        if (Number.isFinite(i) && i >= 0 && i < list.length) {
+          list[i] = { q, a };
+        }
+      }
+      faqsState.translations[code] = list;
+      try {
+        await persistFaqs(code);
+        closeFaqModal();
+        renderFaqsList(code);
+      } catch (e) {
+        msgEl.textContent = "Error guardando: " + e.message;
+        msgEl.className = "error-msg";
+        msgEl.style.display = "block";
+      }
+    }
+
+    async function moveFaq(code, idx, direction) {
+      const list = faqsState.translations[code] || [];
+      const j = idx + direction;
+      if (j < 0 || j >= list.length) return;
+      const tmp = list[idx];
+      list[idx] = list[j];
+      list[j] = tmp;
+      try {
+        await persistFaqs(code);
+        renderFaqsList(code);
+      } catch (e) {
+        alert("Error reordenando: " + e.message);
+      }
+    }
+
+    async function removeFaq(code, idx) {
+      const list = faqsState.translations[code] || [];
+      const item = list[idx];
+      if (!item) return;
+      const preview = (item.q || "").slice(0, 60);
+      if (!confirm(`¿Borrar la pregunta "${preview}"?`)) return;
+      list.splice(idx, 1);
+      try {
+        await persistFaqs(code);
+        renderFaqsList(code);
+      } catch (e) {
+        alert("Error borrando: " + e.message);
+      }
+    }
+
+    async function persistFaqs(code) {
+      const items = (faqsState.translations[code] || []).map(it => ({ q: it.q || "", a: it.a || "" }));
+      const res = await fetch(`${API}/business/${businessId}/faqs/${code}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.detail || "Error");
+      }
+      // Sync state from server response (it normalises trimming etc.)
+      const fresh = await res.json();
+      faqsState.translations[code] = (fresh.items || []).map(it => ({ q: it.q || "", a: it.a || "" }));
     }
 
     /* ════════════════════════════════════════════════

@@ -16,7 +16,7 @@ from app.models import (
     ContactRequest,
     Language,
 )
-from app.routers import action_buttons, ai_config, auth, business, chat, contact, conversations, landing, languages, metrics, superadmin, tenant_admins
+from app.routers import action_buttons, ai_config, auth, business, chat, contact, conversations, faqs, landing, languages, metrics, superadmin, tenant_admins
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
@@ -43,6 +43,7 @@ app.include_router(tenant_admins.router)
 app.include_router(landing.router)
 app.include_router(action_buttons.router)
 app.include_router(ai_config.router)
+app.include_router(faqs.router)
 
 
 @app.on_event("startup")
@@ -53,6 +54,7 @@ def on_startup():
     _seed_languages()
     _seed_demo_data()
     _backfill_business_translations()
+    _migrate_intent_blocks_to_faqs()
     _promote_superadmin_by_email()
 
 
@@ -107,6 +109,9 @@ SCHEMA_MIGRATIONS = [
     # User-management follow-up: soft-disable flag on admin accounts so an
     # owner can pause access without destroying the user row.
     ("admin_users", "is_active", "BOOLEAN DEFAULT TRUE NOT NULL"),
+    # FAQ CRUD: per-language JSON list of {q, a} items, rendered as
+    # accordion on the landing and fed structured to the AI prompt.
+    ("business_translations", "faqs_json", "TEXT DEFAULT '[]'"),
 ]
 
 
@@ -291,6 +296,96 @@ def _promote_superadmin_by_email():
             user.role = "superadmin"
             user.business_id = None
             db.commit()
+    finally:
+        db.close()
+
+
+# Marker that the legacy Fase-3 intent migration left at the start of the
+# folded block in business_translations.extra_info. We use it to find that
+# block again now and convert each "## title\nbody" item into a structured
+# FAQ entry. After conversion the block is stripped from extra_info so the
+# content lives in faqs_json only.
+INTENT_MIGRATION_MARKER = "<!-- intents-migrated -->"
+
+
+def _parse_intent_block_to_faqs(block_text: str) -> list[dict]:
+    """Split a markdown chunk shaped like
+
+        ## title
+        body
+        body cont.
+
+        ## next
+        ...
+
+    into a list of {"q": ..., "a": ...} dicts. Slug titles like
+    "encargos_grupo" get prettified to "Encargos grupo" so the admin sees
+    something legible immediately (they can edit afterwards).
+    """
+    import re
+    if not block_text:
+        return []
+    pattern = re.compile(
+        r"^##\s+(.+?)$\n?(.*?)(?=^##\s|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    items: list[dict] = []
+    for match in pattern.finditer(block_text):
+        title = (match.group(1) or "").strip()
+        body = (match.group(2) or "").strip()
+        if not title:
+            continue
+        # Slugified intent name → readable title.
+        if "_" in title and " " not in title:
+            title = title.replace("_", " ").strip()
+            if title:
+                title = title[0].upper() + title[1:]
+        items.append({"q": title, "a": body})
+    return items
+
+
+def _migrate_intent_blocks_to_faqs():
+    """Move each tenant's <!-- intents-migrated --> block from extra_info
+    into business_translations.faqs_json. Idempotent: skips a translation
+    row when faqs_json is already populated.
+
+    After conversion the block is removed from extra_info (admin gets one
+    source of truth: the FAQs UI). Untouched rows (no marker) are ignored.
+    """
+    db = SessionLocal()
+    try:
+        translations = db.query(BusinessTranslation).all()
+        for tr in translations:
+            try:
+                existing = json.loads(tr.faqs_json or "[]")
+            except (json.JSONDecodeError, TypeError):
+                existing = []
+            if existing:
+                continue  # already migrated for this (biz, lang)
+
+            extra = tr.extra_info or ""
+            idx = extra.find(INTENT_MIGRATION_MARKER)
+            if idx == -1:
+                continue
+
+            block = extra[idx:]
+            # The migration also wrote a "**Preguntas frecuentes...**" header
+            # line right after the marker — skip past the first ## heading.
+            faq_start_in_block = block.find("\n## ")
+            if faq_start_in_block == -1:
+                continue
+            faq_text = block[faq_start_in_block:]
+            faqs = _parse_intent_block_to_faqs(faq_text)
+            if not faqs:
+                continue
+
+            tr.faqs_json = json.dumps(faqs, ensure_ascii=False)
+            tr.extra_info = extra[:idx].rstrip()
+            print(
+                f"[faqs-migration] business {tr.business_id} lang {tr.language_code}: "
+                f"{len(faqs)} FAQs extracted from extra_info"
+            )
+        db.commit()
     finally:
         db.close()
 
