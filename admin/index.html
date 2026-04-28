@@ -324,7 +324,7 @@
     <div class="main">
 
       <!-- Impersonation banner (shown only when superadmin is viewing as a client) -->
-      <div id="impersonationBanner" style="display:none;background:#dc2626;color:#fff;padding:10px 20px;font-size:14px;font-weight:600;position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between">
+      <div id="impersonationBanner" style="display:none;background:#dc2626;color:#fff;padding:10px 20px;font-size:14px;font-weight:600;position:sticky;top:12px;z-index:100;display:flex;align-items:center;justify-content:space-between;border-radius:10px;margin:12px 16px 24px;box-shadow:0 4px 12px rgba(220,38,38,.25)">
         <span>🔴 Viendo como <span id="impersonationName">-</span>. Cualquier cambio afecta a su cuenta.</span>
         <button onclick="exitImpersonation()" style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600">Salir de impersonación</button>
       </div>
@@ -384,10 +384,10 @@
             </select>
           </div>
         </div>
-        <div id="onboardingCard" style="display:none;background:#fff;border:2px solid #fbbf24;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
-
         <div class="stats-grid" id="statsGrid"></div>
         <div id="usageCard" style="display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
+
+        <div id="onboardingCard" style="display:none;background:#fff;border:2px solid #fbbf24;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
 
         <details style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin-bottom:24px;font-size:13px;color:#14532d">
           <summary style="cursor:pointer;font-weight:600">¿Cómo funciona tu plan? Qué consume y qué no</summary>
@@ -2168,7 +2168,20 @@
             section: "business", subtab: "idiomas",
           },
           {
-            done: !!(biz.widget_design && JSON.parse(biz.widget_design || "{}").color),
+            // Mark this step done as soon as the user has saved ANY widget
+            // customization (design tab) OR any UI text (widget texts tab).
+            // The previous check looked at design.color specifically, which
+            // missed admins who only changed icon/position/texts without
+            // touching the color picker.
+            done: (() => {
+              try {
+                const design = JSON.parse(biz.widget_design || "{}");
+                const texts = JSON.parse(biz.widget_ui_texts || "{}");
+                return Object.keys(design).length > 0 || Object.keys(texts).length > 0;
+              } catch (e) {
+                return false;
+              }
+            })(),
             label: "Personaliza el widget (color, icono, posición)",
             section: "embed",
           },
