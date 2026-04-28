@@ -387,7 +387,7 @@
         <div class="stats-grid" id="statsGrid"></div>
         <div id="usageCard" style="display:none;background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
 
-        <div id="onboardingCard" style="display:none;background:#fff;border:2px solid #fbbf24;border-radius:12px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:24px"></div>
+        <div id="onboardingCard" style="display:none;margin-bottom:24px"></div>
 
         <details style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin-bottom:24px;font-size:13px;color:#14532d">
           <summary style="cursor:pointer;font-weight:600">¿Cómo funciona tu plan? Qué consume y qué no</summary>
@@ -2222,19 +2222,16 @@
             section: "business", subtab: "idiomas",
           },
           {
-            // Mark this step done as soon as the user has saved ANY widget
-            // customization (design tab) OR any UI text (widget texts tab).
-            // The previous check looked at design.color specifically, which
-            // missed admins who only changed icon/position/texts without
-            // touching the color picker.
+            // widget_design / widget_ui_texts are NOT exposed by /business/{id}
+            // (BusinessBase schema doesn't include them) so we read from the
+            // /business/{id}/languages response which DOES — and gives them
+            // already-parsed as objects, no JSON.parse needed. The step is
+            // done as soon as either is non-empty (admin touched the Widget
+            // tab and saved anything: color, icon, position, or any UI text).
             done: (() => {
-              try {
-                const design = JSON.parse(biz.widget_design || "{}");
-                const texts = JSON.parse(biz.widget_ui_texts || "{}");
-                return Object.keys(design).length > 0 || Object.keys(texts).length > 0;
-              } catch (e) {
-                return false;
-              }
+              const design = (langs && langs.widget_design) || {};
+              const texts = (langs && langs.widget_ui_texts) || {};
+              return Object.keys(design).length > 0 || Object.keys(texts).length > 0;
             })(),
             label: "Personaliza el widget (color, icono, posición)",
             section: "embed",
@@ -2269,26 +2266,32 @@
           : "Completa estos pasos para sacar el máximo partido al chatbot.";
 
         const dismissBtn = allDone
-          ? `<button onclick="dismissOnboarding()" style="background:#e5e7eb;color:#1f2937;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">Ocultar</button>`
+          ? `<button onclick="event.stopPropagation();dismissOnboarding()" style="background:#fef3c7;color:#78350f;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;margin-left:auto">Ocultar</button>`
           : "";
 
+        // Open by default while there are pending steps; collapse once everything
+        // essential is done so the dashboard stays tidy.
+        const openAttr = allDone ? "" : "open";
+
         card.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
-            <div>
-              <h3 style="margin:0;font-size:18px;color:#92400e">${title}</h3>
-              <p style="margin:4px 0 0;font-size:13px;color:#78716c">${subtitle}</p>
+          <details ${openAttr} style="background:#fffbeb;border-left:4px solid #fbbf24;padding:14px 18px;border-radius:6px;font-size:13px;color:#78350f">
+            <summary style="cursor:pointer;font-weight:600;display:flex;align-items:center;gap:8px;list-style:none">
+              <span style="flex:1">${esc(title)}</span>
+              ${dismissBtn}
+            </summary>
+            <div style="margin-top:12px;line-height:1.7">
+              <p style="margin:0 0 10px;color:#78716c">${esc(subtitle)}</p>
+              <ul style="list-style:none;padding:0;margin:0">
+                ${steps.map((s, i) => `
+                  <li style="padding:8px 0;border-top:${i === 0 ? "none" : "1px solid #fef3c7"};display:flex;align-items:center;gap:12px">
+                    <span style="font-size:16px;width:20px;text-align:center">${s.done ? "✅" : "◯"}</span>
+                    <span style="flex:1;color:${s.done ? "#a3a3a3" : "#78350f"}">${esc(s.label)}${s.optional ? ' <span style="color:#9ca3af;font-size:12px">(opcional)</span>' : ""}</span>
+                    ${s.done ? "" : `<button onclick="goOnboardingStep('${s.section}','${s.subtab || ""}')" style="background:#fbbf24;color:#78350f;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">Ir →</button>`}
+                  </li>
+                `).join("")}
+              </ul>
             </div>
-            ${dismissBtn}
-          </div>
-          <ul style="list-style:none;padding:0;margin:0">
-            ${steps.map((s, i) => `
-              <li style="padding:10px 0;border-top:${i === 0 ? "none" : "1px solid #fef3c7"};display:flex;align-items:center;gap:12px">
-                <span style="font-size:18px">${s.done ? "✅" : "◯"}</span>
-                <span style="flex:1;${s.done ? "color:#78716c;text-decoration:line-through" : ""}">${esc(s.label)}${s.optional ? ' <span style="color:#9ca3af;font-size:12px">(opcional)</span>' : ""}</span>
-                ${s.done ? "" : `<button onclick="goOnboardingStep('${s.section}','${s.subtab || ""}')" style="background:#fbbf24;color:#78350f;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px">Ir →</button>`}
-              </li>
-            `).join("")}
-          </ul>
+          </details>
         `;
       } catch (e) {
         console.error("renderOnboarding", e);
