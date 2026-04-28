@@ -584,7 +584,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
         ctas.append(f'<a class="cta" href="tel:{_esc(business.phone)}">📞 {_esc(labels["call"])}</a>')
     if business.email:
         ctas.append(f'<a class="cta" href="mailto:{_esc(business.email)}">✉️ {_esc(labels["email"])}</a>')
-    if business.whatsapp_enabled and business.whatsapp_phone:
+    if business.whatsapp_in_landing and business.whatsapp_phone:
         wa = re.sub(r"\D", "", business.whatsapp_phone)
         ctas.append(f'<a class="cta" href="https://wa.me/{_esc(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>')
     cta_block = "".join(ctas) if ctas else ""
@@ -680,7 +680,7 @@ def _render_landing(business: Business, t: dict, lang: str, public_url: str, lab
     {'<div class="logo-wrap"><img src="' + _esc(business.logo_url) + '" alt="' + _esc(t["name"]) + '" /></div>' if business.logo_url else ''}
     <h1>{_esc(t["name"])}</h1>
     <p>{_render_inline_md(t["description"])}</p>
-    <a href="#chat" class="btn-primary" onclick="document.querySelector('.cw-bubble')?.click();return false;">{_esc(labels["chat_cta"])}</a>
+    <a href="#chat" class="btn-primary" onclick="window.dispatchEvent(new CustomEvent('cw:open'));return false;">{_esc(labels["chat_cta"])}</a>
   </header>
   <div class="share-toast" id="shareToast">{_esc(labels["share_copied"])}</div>
   <script>

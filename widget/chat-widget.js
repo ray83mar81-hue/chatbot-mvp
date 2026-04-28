@@ -1190,6 +1190,14 @@
   });
   closeBtn.addEventListener("click", toggleOpen);
 
+  // Cross-frame open hook: any element on the host page (e.g. the public
+  // landing's "Chatear con nosotros" CTA) can open the widget by dispatching
+  // a 'cw:open' event on window. Avoids fishing inside Shadow DOM.
+  window.addEventListener("cw:open", async () => {
+    if (!state.initialized) await init();
+    if (!isOpen) toggleOpen();
+  });
+
   langBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     langMenu.classList.toggle("cw-open");

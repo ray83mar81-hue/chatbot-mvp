@@ -31,7 +31,16 @@ class Business(Base):
     contact_notification_email = Column(String(255), default="")  # falls back to .email if empty
     privacy_url = Column(String(500), default="")
     whatsapp_phone = Column(String(50), default="")  # E.164 without "+", e.g. "34612345678"
+    # whatsapp_enabled: shows the "I accept WhatsApp contact" checkbox in the
+    # widget's contact form. Independent from the landing toggle below — a
+    # client may use only one surface, both, or neither (the WhatsApp action
+    # chip in the widget header is configured separately under Acciones).
     whatsapp_enabled = Column(Boolean, default=False)
+    # whatsapp_in_landing: shows the WhatsApp CTA button on the public
+    # landing page. Default True to preserve existing tenants' behaviour
+    # when the column was added; harmless when whatsapp_phone is empty
+    # because the button render still requires both flags.
+    whatsapp_in_landing = Column(Boolean, default=True, nullable=False, server_default="1")
 
     # Platform-level: superadmin can deactivate a tenant without deleting their data
     is_active = Column(Boolean, default=True, nullable=False)

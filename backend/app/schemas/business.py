@@ -20,6 +20,7 @@ class BusinessBase(BaseModel):
     privacy_url: str = ""
     whatsapp_phone: str = ""
     whatsapp_enabled: bool = False
+    whatsapp_in_landing: bool = True
 
 
 class BusinessCreate(BusinessBase):
@@ -43,6 +44,7 @@ class BusinessUpdate(BaseModel):
     privacy_url: str | None = None
     whatsapp_phone: str | None = None
     whatsapp_enabled: bool | None = None
+    whatsapp_in_landing: bool | None = None
 
 
 class BusinessResponse(BusinessBase):

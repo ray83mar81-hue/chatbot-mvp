@@ -112,6 +112,11 @@ SCHEMA_MIGRATIONS = [
     # FAQ CRUD: per-language JSON list of {q, a} items, rendered as
     # accordion on the landing and fed structured to the AI prompt.
     ("business_translations", "faqs_json", "TEXT DEFAULT '[]'"),
+    # Split WhatsApp visibility: whatsapp_enabled stays as the contact-form
+    # consent toggle; the new flag controls the landing-page CTA button only.
+    # Default TRUE so existing tenants with whatsapp_enabled+phone keep their
+    # landing button. Harmless on fresh tenants until they add a phone.
+    ("businesses", "whatsapp_in_landing", "BOOLEAN DEFAULT TRUE NOT NULL"),
 ]
 
 
