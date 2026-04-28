@@ -922,8 +922,8 @@
       </div>
       <div class="form-group">
         <label>Respuesta</label>
-        <textarea id="faqAnswer" rows="5" placeholder="Escribe la respuesta tal y como quieres que la lean tus clientes." maxlength="4000"></textarea>
-        <p class="md-hint">Acepta saltos de línea y formato básico (negrita con <code>**texto**</code>, listas con <code>-</code>).</p>
+        <div id="faqAnswerWrap"></div>
+        <p class="md-hint">Usa los botones de la barra para dar formato (negrita, cursiva, lista, enlace). Aparecerá formateado en tu página pública y en el chat.</p>
       </div>
 
       <div id="faqEditMsg" style="display:none;margin:12px 0"></div>
@@ -2636,7 +2636,10 @@
       document.getElementById("faqEditIndex").value = editing ? String(index) : "";
       const item = editing ? (faqsState.translations[code][index] || { q: "", a: "" }) : { q: "", a: "" };
       document.getElementById("faqQuestion").value = item.q || "";
-      document.getElementById("faqAnswer").value = item.a || "";
+      // Build the markdown editor for the answer with the current content.
+      // Reuses mdEditorHtml/mdSync/mdExec already in the admin (same as
+      // "Información del negocio"). 6 rows ~ 150px tall.
+      document.getElementById("faqAnswerWrap").innerHTML = mdEditorHtml(code, "faq-answer-md", item.a || "", 6);
       document.getElementById("faqEditMsg").style.display = "none";
       document.getElementById("faqModal").classList.add("open");
     }
@@ -2651,7 +2654,10 @@
       const code = document.getElementById("faqEditLang").value;
       const idxRaw = document.getElementById("faqEditIndex").value;
       const q = (document.getElementById("faqQuestion").value || "").trim();
-      const a = (document.getElementById("faqAnswer").value || "").trim();
+      // Read the markdown value from the hidden textarea kept in sync by
+      // mdSync inside mdEditorHtml — same pattern as "Información del negocio".
+      const answerEl = document.querySelector("#faqAnswerWrap .faq-answer-md");
+      const a = ((answerEl && answerEl.value) || "").trim();
 
       if (!q) {
         msgEl.textContent = "La pregunta no puede estar vacía.";
