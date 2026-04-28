@@ -501,6 +501,22 @@
               <p class="md-hint">Se muestra al usuario como contacto alternativo. También recibe las notificaciones del formulario de contacto (salvo que uses otro email específico en la pestaña "Formulario de contacto").</p>
             </div>
 
+            <!-- WhatsApp (datos de contacto + visibilidad en landing) -->
+            <div class="modal-section-title" style="margin-top:24px">WhatsApp <span style="color:#9ca3af;font-weight:400;font-size:13px">(opcional)</span></div>
+            <div class="form-group">
+              <label>Número WhatsApp <span style="color:#9ca3af;font-weight:400">(formato internacional sin "+", ej: 34612345678)</span></label>
+              <input id="bizWhatsappPhone" placeholder="34612345678" />
+              <p class="md-hint">Sin este número, ninguna opción WhatsApp aparece (ni botón de la web ni casilla del formulario).</p>
+            </div>
+            <div class="form-group form-row" style="margin-bottom:8px">
+              <input type="checkbox" id="bizWhatsappInLanding" />
+              <label for="bizWhatsappInLanding" style="margin:0">Mostrar botón WhatsApp en mi página pública</label>
+            </div>
+            <p class="md-hint" style="margin:-4px 0 14px 24px">Aparece como CTA grande junto a "Llamar" y "Email". Solo aplica si tienes activada la página pública en la pestaña <strong>Página web</strong>.</p>
+            <div style="background:#f0fdf4;border-left:3px solid #16a34a;padding:10px 14px;border-radius:6px;margin-bottom:24px;font-size:12px;color:#166534">
+              💡 ¿Quieres también un <strong>chip de acción WhatsApp</strong> dentro del propio widget de chat (junto a llamar/mapa/carta)? Configúralo en la pestaña lateral <strong>Acciones</strong>. Es independiente de los toggles de aquí.
+            </div>
+
             <!-- Translatable fields with language tabs -->
             <div class="modal-section-title" style="margin-top:24px">Textos traducibles</div>
             <p style="font-size:13px;color:#6b7280;margin:8px 0 12px">Estos campos se muestran al usuario final en el idioma que tenga seleccionado. Usa "Traducir con IA" en la pestaña Idiomas para generar las traducciones de golpe.</p>
@@ -585,25 +601,11 @@
               <label>Email para notificaciones <span style="color:#9ca3af;font-weight:400">(si vacío, usa el email del negocio)</span></label>
               <input id="bizContactEmail" placeholder="contacto@miempresa.com" />
             </div>
-            <div class="modal-section-title" style="margin-top:8px">WhatsApp</div>
-            <div class="form-group">
-              <label>Número WhatsApp <span style="color:#9ca3af;font-weight:400">(formato internacional sin "+", ej: 34612345678)</span></label>
-              <input id="bizWhatsappPhone" placeholder="34612345678" />
-              <p class="md-hint">Sin este número, el resto de opciones WhatsApp no aparecen aunque estén activadas.</p>
-            </div>
-            <div class="form-group form-row" style="margin-bottom:8px">
+            <div class="form-group form-row" style="margin-bottom:8px;margin-top:8px">
               <input type="checkbox" id="bizWhatsappEnabled" />
-              <label for="bizWhatsappEnabled" style="margin:0">Mostrar opción WhatsApp en el formulario de contacto del widget</label>
+              <label for="bizWhatsappEnabled" style="margin:0">Mostrar opción WhatsApp en el formulario de contacto</label>
             </div>
-            <p class="md-hint" style="margin:-4px 0 14px 24px">Añade una casilla "acepto ser contactado por WhatsApp" al formulario de leads. Si el visitante la marca, recibirás un enlace directo a wa.me en el email de aviso.</p>
-            <div class="form-group form-row" style="margin-bottom:8px">
-              <input type="checkbox" id="bizWhatsappInLanding" />
-              <label for="bizWhatsappInLanding" style="margin:0">Mostrar botón WhatsApp en mi página pública</label>
-            </div>
-            <p class="md-hint" style="margin:-4px 0 14px 24px">Solo aplica si tienes activada la página pública en la pestaña <strong>Página web</strong>. Aparece como CTA grande junto a "Llamar" y "Email".</p>
-            <div style="background:#f0fdf4;border-left:3px solid #16a34a;padding:10px 14px;border-radius:6px;margin-bottom:24px;font-size:12px;color:#166534">
-              💡 ¿Quieres también un <strong>chip de acción WhatsApp</strong> dentro del propio widget de chat (junto a llamar/mapa/carta)? Configúralo en la pestaña lateral <strong>Acciones</strong>. Es independiente de los toggles de aquí.
-            </div>
+            <p class="md-hint" style="margin:-4px 0 14px 24px">Añade una casilla "acepto ser contactado por WhatsApp" al formulario de leads. Si el visitante la marca, recibirás un enlace directo a wa.me en el email de aviso. <strong>Configura el número en la pestaña "Datos del negocio".</strong></p>
 
             <!-- Per-language: privacy URL + form labels -->
             <div class="modal-section-title">Textos del formulario por idioma</div>
