@@ -2753,6 +2753,31 @@
       return { name: "", description: "", address: "", schedule: "{}", extra_info: "", auto_translated: false, needs_review: false };
     }
 
+    // Lightweight lang loader used by sub-features (Acciones, FAQs) that
+    // need bizLangState populated without paying for the full loadBusiness
+    // (which also fetches translations, widget design, etc.). Idempotent —
+    // returns immediately if the catalog is already in memory.
+    async function ensureBusinessLangsLoaded() {
+      if (bizLangState.catalog && bizLangState.catalog.length) return;
+      try {
+        const [langsRes, catRes] = await Promise.all([
+          fetch(`${API}/business/${businessId}/languages`),
+          fetch(`${API}/languages/`),
+        ]);
+        if (catRes.ok) {
+          bizLangState.catalog = await catRes.json();
+        }
+        if (langsRes.ok) {
+          const langsData = await langsRes.json();
+          bizLangState.supported = (langsData.supported || []).map(l => l.code);
+          bizLangState.defaultLang = langsData.default_language || "es";
+          bizLangState.welcomes = langsData.welcome_messages || {};
+        }
+      } catch (e) {
+        console.error("ensureBusinessLangsLoaded", e);
+      }
+    }
+
     async function loadBusiness() {
       try {
         // 1) Fetch all data in parallel
