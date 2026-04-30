@@ -43,15 +43,42 @@
 
 Los tokens son solo una parte. Tabla completa:
 
-| Concepto | Coste mensual por cliente | Notas |
-|---|---:|---|
-| **Tokens IA** (1000 msgs/mes, gpt-4o-mini) | ~$0.20 | Escala con volumen y modelo, ver tabla abajo |
-| **Infraestructura compartida** (DB + contenedor Easypanel) | 0.50-1 € | Despreciable hasta ~30-50 tenants |
-| **Pasarela de cobro** (Stripe/Redsys ~1.5% + 0.25€) | 0.70-1.50 € | Sobre una cuota de 40-80€ |
-| **Email transaccional** (form contacto) | ~0.10 € | SMTP o Resend |
-| **Backups BD compartida** | ~0.05 € | Prorrateado |
-| **🕐 Tu tiempo de soporte** | **10-30 €** | El coste dominante, ver apartado 6 |
-| **Total realista / cliente / mes** | **12-35 €** | |
+> **Fuente de los precios de infra:** `D:\Proyectos VS\precios-infraestructura.md`. Revisar cada 6 meses por si cambian Contabo / Easypanel / Stripe / Resend.
+
+### Modelo recomendado: compartido (1 VPS para varios clientes)
+
+Asumiendo **VPS Contabo Cloud 20 anual** (11 €/mes, 6 vCPU + 12 GB RAM + 200 GB SSD) + **Easypanel Basic anual** con cupón `pdpichec10` (~9 €/mes), prorrateado entre N clientes:
+
+| Concepto | 5 clientes | 10 clientes | 20 clientes |
+|---|---:|---:|---:|
+| VPS prorrateado | 2.20 € | **1.10 €** | 0.55 € |
+| Easypanel Basic prorrateado | 1.80 € | **0.90 €** | 0.45 € |
+| Storage (5 GB en B2 + R2) | 0.10 € | 0.10 € | 0.10 € |
+| Email Resend (free hasta 3000/mes) | 0 € | 0 € | 0 € |
+| **Subtotal infra** | **4.10 €** | **2.10 €** | **1.10 €** |
+
+A esto suma:
+- **Tokens IA** (variable según modelo, ver tabla abajo).
+- **Comisión Stripe** (1.4 % + 0.25 €): 0.66 € sobre 29 €, **0.80 € sobre 39 €**, 1.36 € sobre 79 €.
+- **🕐 Tu tiempo de soporte**: ~30 min/cliente/mes × 50 €/h = **25 €** (el coste dominante).
+
+### Tabla resumen — coste real con N=10 clientes en VPS compartido
+
+| Concepto | gpt-4o-mini · 1000 msgs | claude-haiku · 5000 msgs |
+|---|---:|---:|
+| Infra prorrateada (VPS + Easypanel + storage) | 2.10 € | 2.10 € |
+| Tokens IA | 0.18 € | 6.90 € |
+| Stripe (1.4% + 0.25 €, sobre 39 / 79 €) | 0.80 € | 1.36 € |
+| Email + backups | 0.05 € | 0.05 € |
+| **Subtotal infra + IA + cobro** | **3.13 €** | **10.41 €** |
+| 🕐 Tu tiempo soporte (~30 min/mes) | 25.00 € | 25.00 € |
+| **TOTAL realista** | **~28 €/cliente/mes** | **~35 €/cliente/mes** |
+
+**Lectura clave**: el coste de servidor + IA por cliente es <11 € en cualquier escenario razonable. Lo que pesa de verdad es **tu tiempo de soporte**. Por eso la cuota tiene que estar dimensionada para pagar tu tiempo, no los tokens.
+
+### Modelo dedicado (1 VPS por cliente) — solo para Custom
+
+Cuando un cliente exige aislamiento total, se le asigna su propio VPS Cloud 10 (3.60 €/mes anual, Easypanel free hasta 3 proyectos). Coste infra dedicado: ~3.70 €/mes. Argumento de venta: performance dedicada, sin "vecino ruidoso". Solo en plan Custom; el sobrecoste lo absorbe la tarifa más alta.
 
 ### Coste de tokens según modelo y volumen
 Un mensaje típico consume ~700 tokens (500 input + 200 output):
@@ -325,4 +352,4 @@ Lista priorizada de mejoras conocidas. **Ninguna bloquea vender** al primer clie
 
 ---
 
-**Última actualización:** 2026-04-25. Revisar cada 3-6 meses o cuando cambien precios de los modelos de IA. Si los tiers no convierten en 3 meses, bajar precio del Básico a 29 €/mes (probado suele mover conversión) antes de añadir más features.
+**Última actualización:** 2026-04-30 — incorporados precios reales de infraestructura desde `D:\Proyectos VS\precios-infraestructura.md` (Contabo VPS 20 a 11 €/mes anual, Easypanel Basic con cupón `pdpichec10` a ~9 €/mes, Stripe ES 1.4 % + 0.25 €, Resend free, Backblaze B2 + R2). Revisar cada 3-6 meses o cuando cambien precios de los modelos de IA. Si los tiers no convierten en 3 meses, bajar precio del Básico a 29 €/mes (probado suele mover conversión) antes de añadir más features.
