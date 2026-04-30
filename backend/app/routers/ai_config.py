@@ -20,6 +20,8 @@ from app.schemas.ai_config import (
     AIConfigUpdate,
     OpenRouterModel,
 )
+from app.services.key_encryption import decrypt as decrypt_key
+from app.services.key_encryption import encrypt as encrypt_key
 
 router = APIRouter(tags=["ai-config"])
 
@@ -33,11 +35,14 @@ def _mask_key(key: str | None) -> str:
 
 
 def _build_response(biz: Business) -> AIConfigResponse:
+    # Decrypt before masking so the admin sees the last-4 of their actual
+    # provider key, not the last-4 of the cipher (which would be useless).
+    plaintext = decrypt_key(biz.ai_api_key)
     return AIConfigResponse(
         provider=biz.ai_provider,
         model=biz.ai_model,
         base_url=biz.ai_base_url,
-        api_key_masked=_mask_key(biz.ai_api_key),
+        api_key_masked=_mask_key(plaintext),
         has_api_key=bool(biz.ai_api_key),
         input_price_per_million=biz.ai_input_price_per_million,
         output_price_per_million=biz.ai_output_price_per_million,
@@ -92,12 +97,13 @@ def update_ai_config(
         # None → unchanged (handled by exclude_unset above; "api_key" is in
         # payload only if the caller sent it explicitly).
         # "" → clear
-        # any other string → replace
+        # any other string → replace, encrypted at rest if a secret is set.
         k = payload["api_key"]
         if k == "":
             business.ai_api_key = None
         elif k is not None:
-            business.ai_api_key = k.strip() or None
+            stripped = k.strip()
+            business.ai_api_key = encrypt_key(stripped) if stripped else None
 
     if "base_url" in payload:
         u = (payload["base_url"] or "").strip()

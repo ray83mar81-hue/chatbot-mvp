@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     # Salt for hashing client IPs (GDPR compliance)
     IP_HASH_SALT: str = "change-me-in-production"
 
+    # Symmetric encryption for tenant-supplied API keys at rest. Any string
+    # works — it gets normalised to a 32-byte Fernet key via SHA-256.
+    # Empty value disables encryption (dev/staging fallback): keys are
+    # stored plaintext. Set this in production before storing any real
+    # provider credential. Rotating it invalidates existing encrypted keys
+    # — the admin would need to re-enter them once.
+    AI_KEY_ENCRYPTION_SECRET: str = ""
+
     # On startup, if an AdminUser with this email exists, promote it to
     # role=superadmin. Useful for one-shot deployments where the existing
     # admin user should become the platform operator.

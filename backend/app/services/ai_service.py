@@ -24,6 +24,7 @@ from app.config import settings
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation
 from app.models.message import Message
+from app.services.key_encryption import decrypt as _decrypt_key
 
 
 # Supported languages for the chatbot. This dict is the single source of
@@ -98,7 +99,9 @@ def _resolve_ai_config(business: Business) -> dict:
     else:
         base_url = _DEFAULT_BASE_URLS.get(provider)
 
-    api_key = business.ai_api_key
+    # Decrypt the stored key (no-op for legacy plaintext / when no secret
+    # is configured — see services/key_encryption.py).
+    api_key = _decrypt_key(business.ai_api_key) if business.ai_api_key else ""
     if not api_key:
         # Fall back to the env var that matches THIS provider's SDK family —
         # never cross-wire (passing OPENAI_API_KEY to Anthropic would 401).

@@ -55,7 +55,34 @@ def on_startup():
     _seed_demo_data()
     _backfill_business_translations()
     _migrate_intent_blocks_to_faqs()
+    _encrypt_legacy_api_keys()
     _promote_superadmin_by_email()
+
+
+def _encrypt_legacy_api_keys():
+    """One-shot upgrade: rewrite plaintext businesses.ai_api_key values as
+    encrypted tokens once an AI_KEY_ENCRYPTION_SECRET is configured.
+    Idempotent — already-encrypted rows (PREFIX-marked) are skipped.
+    No-op while the env var is empty (dev/staging without a key).
+    """
+    if not (settings.AI_KEY_ENCRYPTION_SECRET or "").strip():
+        return
+    from app.services.key_encryption import PREFIX, encrypt
+    db = SessionLocal()
+    try:
+        rows = db.query(Business).filter(Business.ai_api_key.isnot(None)).all()
+        migrated = 0
+        for biz in rows:
+            stored = (biz.ai_api_key or "").strip()
+            if not stored or stored.startswith(PREFIX):
+                continue
+            biz.ai_api_key = encrypt(stored)
+            migrated += 1
+        if migrated:
+            db.commit()
+            print(f"[key-encryption] encrypted {migrated} legacy API key(s) at rest")
+    finally:
+        db.close()
 
 
 # Lightweight schema migrations. Each entry is a tuple of
