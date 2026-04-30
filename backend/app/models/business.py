@@ -46,6 +46,12 @@ class Business(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     # Monthly token cap for this tenant (NULL = unlimited). Superadmin sets this.
     monthly_token_quota = Column(Integer, nullable=True)
+
+    # Retention window for conversations + their messages. After this many
+    # days of inactivity (last message older than now - retention_days) a
+    # conversation is hard-deleted by the startup purge. Per-tenant so
+    # different plans can promise different windows; default 365 = 1 year.
+    retention_days = Column(Integer, nullable=False, default=365, server_default="365")
     # Timestamp of the last "80% of quota reached" warning email fired for
     # this tenant. Used to avoid spamming once the warning threshold is
     # crossed; compared against the current month start to auto-reset each

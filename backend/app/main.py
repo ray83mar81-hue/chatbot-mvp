@@ -56,7 +56,66 @@ def on_startup():
     _backfill_business_translations()
     _migrate_intent_blocks_to_faqs()
     _encrypt_legacy_api_keys()
+    _purge_old_conversations()
     _promote_superadmin_by_email()
+
+
+def _purge_old_conversations():
+    """Hard-delete conversations whose last activity is older than the
+    tenant's retention window (Business.retention_days, default 365).
+
+    "Last activity" = MAX(messages.created_at), or conversations.started_at
+    if the conversation has no messages. Idempotent — re-running just finds
+    nothing to delete after the first sweep of the day.
+
+    Runs at every startup; for an MVP redeploying weekly that's plenty,
+    and avoids needing a real scheduler. Move to a daily cron when the
+    deploy cadence drops below the retention granularity.
+    """
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
+    from app.models.conversation import Conversation
+    from app.models.message import Message
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        purged_total = 0
+        for biz in db.query(Business).all():
+            retention = biz.retention_days or 365
+            if retention <= 0:
+                continue  # never purge if explicitly disabled
+            cutoff = now - timedelta(days=retention)
+
+            last_msg_subq = (
+                db.query(
+                    Message.conversation_id.label("cid"),
+                    func.max(Message.created_at).label("last_at"),
+                )
+                .group_by(Message.conversation_id)
+                .subquery()
+            )
+
+            old = (
+                db.query(Conversation)
+                .outerjoin(last_msg_subq, Conversation.id == last_msg_subq.c.cid)
+                .filter(
+                    Conversation.business_id == biz.id,
+                    func.coalesce(last_msg_subq.c.last_at, Conversation.started_at) < cutoff,
+                )
+                .all()
+            )
+
+            for conv in old:
+                # Messages first — the FK doesn't have ondelete=CASCADE.
+                db.query(Message).filter(Message.conversation_id == conv.id).delete()
+                db.delete(conv)
+                purged_total += 1
+        if purged_total:
+            db.commit()
+            print(f"[retention] purged {purged_total} stale conversation(s)")
+    finally:
+        db.close()
 
 
 def _encrypt_legacy_api_keys():
@@ -144,6 +203,10 @@ SCHEMA_MIGRATIONS = [
     # Default TRUE so existing tenants with whatsapp_enabled+phone keep their
     # landing button. Harmless on fresh tenants until they add a phone.
     ("businesses", "whatsapp_in_landing", "BOOLEAN DEFAULT TRUE NOT NULL"),
+    # Conversation retention window in days. After this much inactivity the
+    # conversation + its messages are hard-deleted by the startup purge.
+    # Default 365 (~Pro plan). Superadmin can override per tenant later.
+    ("businesses", "retention_days", "INTEGER DEFAULT 365 NOT NULL"),
 ]
 
 

@@ -48,9 +48,18 @@ def _resolve_language(request_lang: str | None, business: Business) -> str:
     return business.default_language or "es"
 
 
+# Auto-archive idle conversations after this many days. The next message
+# from the same session_id starts a fresh conversation so the AI doesn't
+# resume context from months ago. The old conversation stays in the DB
+# (status="archived") until the retention purge eventually hard-deletes it.
+AUTO_ARCHIVE_DAYS = 30
+
+
 def _get_or_create_conversation(
     db: Session, session_id: str, business_id: int, language: str = "es"
 ) -> Conversation:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=AUTO_ARCHIVE_DAYS)
+
     conversation = (
         db.query(Conversation)
         .filter(
@@ -58,8 +67,30 @@ def _get_or_create_conversation(
             Conversation.business_id == business_id,
             Conversation.status == "active",
         )
+        .order_by(Conversation.started_at.desc())
         .first()
     )
+
+    if conversation:
+        last_msg = (
+            db.query(Message)
+            .filter(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at.desc())
+            .first()
+        )
+        last_at = last_msg.created_at if last_msg else conversation.started_at
+        if last_at is not None and last_at.tzinfo is None:
+            # PostgreSQL columns can come back naive depending on driver
+            # config. Normalise to UTC-aware for the comparison below.
+            last_at = last_at.replace(tzinfo=timezone.utc)
+        if last_at is None or last_at < cutoff:
+            # Idle past the auto-archive threshold → close it and start
+            # fresh so the next AI prompt isn't poisoned by stale context.
+            conversation.status = "archived"
+            conversation.ended_at = datetime.now(timezone.utc)
+            db.commit()
+            conversation = None
+
     if not conversation:
         conversation = Conversation(
             session_id=session_id,
