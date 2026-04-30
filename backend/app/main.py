@@ -122,7 +122,11 @@ def _encrypt_legacy_api_keys():
     """One-shot upgrade: rewrite plaintext businesses.ai_api_key values as
     encrypted tokens once an AI_KEY_ENCRYPTION_SECRET is configured.
     Idempotent — already-encrypted rows (PREFIX-marked) are skipped.
-    No-op while the env var is empty (dev/staging without a key).
+    Silent no-op while the env var is empty (dev/staging without a key).
+
+    Always prints a status line when the secret IS set, even if there are
+    zero rows to migrate — that way the operator can confirm the env var
+    reached the process by checking Runtime logs after the rebuild.
     """
     if not (settings.AI_KEY_ENCRYPTION_SECRET or "").strip():
         return
@@ -130,16 +134,27 @@ def _encrypt_legacy_api_keys():
     db = SessionLocal()
     try:
         rows = db.query(Business).filter(Business.ai_api_key.isnot(None)).all()
+        plaintext_count = 0
+        already_encrypted = 0
         migrated = 0
         for biz in rows:
             stored = (biz.ai_api_key or "").strip()
-            if not stored or stored.startswith(PREFIX):
+            if not stored:
                 continue
+            if stored.startswith(PREFIX):
+                already_encrypted += 1
+                continue
+            plaintext_count += 1
             biz.ai_api_key = encrypt(stored)
             migrated += 1
         if migrated:
             db.commit()
-            print(f"[key-encryption] encrypted {migrated} legacy API key(s) at rest")
+        print(
+            f"[key-encryption] secret active. "
+            f"encrypted {migrated} new key(s); "
+            f"{already_encrypted} already encrypted from a previous run; "
+            f"{len(rows)} tenant API key(s) total."
+        )
     finally:
         db.close()
 
