@@ -24,6 +24,11 @@ venv/
 acceso demo.txt
 acceso*.txt
 
+# Documentos comerciales con márgenes/precios — viven en D:\Proyectos VS\
+# (junto al cuaderno de infraestructura), no en el repo público.
+docs/producto-y-precios.md
+docs/producto-y-precios-*.md
+
 # OS
 .DS_Store
 Thumbs.db

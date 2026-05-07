@@ -14,7 +14,12 @@ from app.models.business import Business
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.ai_service import AIError, ai_fallback_message, generate_ai_response, stream_ai_response
+from app.services.ai_service import (
+    AIError,
+    ai_fallback_message,
+    generate_ai_response,
+    stream_ai_response,
+)
 from app.services.chat_limits import check_chat_gate, check_quota_warning
 from app.services.incident_service import log as log_incident
 from app.services.notification_service import send_quota_warning

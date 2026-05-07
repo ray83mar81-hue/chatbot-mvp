@@ -4,7 +4,6 @@ from sqlalchemy.sql import func
 
 from app.database import Base
 
-
 # Button types. Each maps to a specific widget render + target semantics.
 # - "call":     value = phone number. Widget renders tel: link.
 # - "whatsapp": value = phone E.164 without +. Widget renders https://wa.me/<value>.

@@ -88,11 +88,14 @@ flags/             # SVGs de idiomas (servidos estáticos)
 ## Checklist pre-deploy
 
 ```bash
+ruff check .                                  # P19/R13: bugs estáticos antes que nada
 grep -rn "localhost" widget/ admin/           # P02: no URLs absolutas
 grep -rn "</script" admin/index.html          # P04: sin </script> sin escapar
 docker build . --no-cache                     # P01: todas las COPY ok
 curl http://localhost:8000/health             # endpoint responde
 ```
+
+**No redeployar nunca un commit con CI roja en GitHub.** El workflow `.github/workflows/ci.yml` corre `ruff check .` en cada push a `main` y en cada PR. Easypanel sigue desplegando de `main` automáticamente, así que el ❌ en GitHub es la única señal de stop. Ver R13 para el plan completo de capas de defensa.
 
 ## Cómo arrancar en local
 

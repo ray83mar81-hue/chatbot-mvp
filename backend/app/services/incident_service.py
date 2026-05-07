@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.models.incident import Incident
 
-
 MAX_MESSAGE_LEN = 500
 MAX_DETAILS_LEN = 4000
 

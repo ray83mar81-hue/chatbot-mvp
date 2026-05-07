@@ -1,0 +1,41 @@
+# Tooling config for chatbot-mvp. The project uses pip + requirements.txt
+# for runtime deps (no Poetry/uv); this file is dedicated to dev tooling.
+
+[tool.ruff]
+# Match the Docker base image (python:3.12-slim).
+target-version = "py312"
+line-length = 100
+
+# Exclude vendored / generated trees and the alembic env stub.
+extend-exclude = [
+    "backend/alembic/versions",
+    "backend/.venv",
+    "venv",
+    "node_modules",
+    "n8n-mcp",
+]
+
+[tool.ruff.lint]
+# We start strict on the rules that catch real bugs (undefined names,
+# unused imports, syntax errors) and stay loose on style.
+# `F` (Pyflakes) contains F821 — the rule that would have caught the
+# `timedelta` import regression that broke chat for every tenant.
+select = [
+    "E9",  # syntax errors
+    "F",   # Pyflakes: undefined names, unused imports, etc.
+    "B",   # flake8-bugbear: likely-buggy patterns
+    "I",   # import ordering
+]
+
+# Style nits we explicitly don't want to fail CI on yet. Add rules to
+# `select` above once the codebase has been cleaned, never silence a
+# bug-class rule (F821, F811, B008, …) without writing down why.
+ignore = [
+    "B008",  # function call in default argument — used by FastAPI Depends()
+    "E731",  # lambda assignment — fine for short helpers
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests get an unused-import / star-import pass — fixtures and fakes are
+# often imported "for side effect" or to populate a namespace.
+"backend/tests/**" = ["F401", "F403"]

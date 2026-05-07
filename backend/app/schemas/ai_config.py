@@ -1,7 +1,6 @@
 """AI per-tenant configuration schemas (Fase 5)."""
 from pydantic import BaseModel
 
-
 AI_PROVIDER_CHOICES = ("openrouter", "openai", "anthropic", "gemini", "grok", "custom")
 
 

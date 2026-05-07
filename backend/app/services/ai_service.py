@@ -26,7 +26,6 @@ from app.models.business_translation import BusinessTranslation
 from app.models.message import Message
 from app.services.key_encryption import decrypt as _decrypt_key
 
-
 # Supported languages for the chatbot. This dict is the single source of
 # truth for (a) the system prompt ("respond in {name}") and (b) the
 # per-tenant language allow-list enforced at the API boundary. To add a new

@@ -158,7 +158,7 @@ async def list_openrouter_models(
             r = await client.get(_OPENROUTER_MODELS_URL)
         r.raise_for_status()
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"OpenRouter fetch failed: {e}")
+        raise HTTPException(status_code=502, detail=f"OpenRouter fetch failed: {e}") from e
 
     raw = r.json().get("data") or []
     out: list[OpenRouterModel] = []

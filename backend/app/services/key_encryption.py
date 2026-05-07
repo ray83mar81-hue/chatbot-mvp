@@ -22,7 +22,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import settings
 
-
 PREFIX = "enc:v1:"
 
 

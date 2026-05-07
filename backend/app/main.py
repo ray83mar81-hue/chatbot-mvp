@@ -13,19 +13,36 @@ from app.models import (
     AdminUser,
     Business,
     BusinessTranslation,
-    ContactRequest,
     Language,
 )
-from app.routers import action_buttons, ai_config, auth, business, chat, contact, conversations, faqs, landing, languages, metrics, superadmin, tenant_admins
+from app.routers import (
+    action_buttons,
+    ai_config,
+    auth,
+    business,
+    chat,
+    contact,
+    conversations,
+    faqs,
+    landing,
+    languages,
+    metrics,
+    superadmin,
+    tenant_admins,
+)
 
 app = FastAPI(title="Chatbot MVP", version="1.0.0")
 
-# CORS — allow widget and admin panel to connect
+# CORS — allow widget and admin panel to connect.
+# allow_credentials must stay False: the widget needs to be embeddable on
+# arbitrary client domains (CORS_ORIGINS="*"), and the spec forbids
+# Access-Control-Allow-Origin: * together with credentials. Auth uses JWT
+# in the Authorization header, not cookies, so credentials are not needed.
 origins = settings.CORS_ORIGINS.split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -73,7 +90,9 @@ def _purge_old_conversations():
     deploy cadence drops below the retention granularity.
     """
     from datetime import datetime, timedelta, timezone
+
     from sqlalchemy import func
+
     from app.models.conversation import Conversation
     from app.models.message import Message
 
@@ -539,8 +558,22 @@ WIDGET_DIR = PROJECT_ROOT / "widget"
 ADMIN_DIR = PROJECT_ROOT / "admin"
 FLAGS_DIR = PROJECT_ROOT / "flags"
 
+
+class RevalidatingStaticFiles(StaticFiles):
+    """Force browsers to revalidate every request via ETag (304 when unchanged).
+
+    Without this, host sites cache chat-widget.js for days under the browser's
+    heuristic and never pick up new design fields the admin saves. See P15
+    in docs/chatbot-mvp-lessons.md.
+    """
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
 if WIDGET_DIR.exists():
-    app.mount("/widget", StaticFiles(directory=str(WIDGET_DIR)), name="widget")
+    app.mount("/widget", RevalidatingStaticFiles(directory=str(WIDGET_DIR)), name="widget")
 if FLAGS_DIR.exists():
     app.mount("/flags", StaticFiles(directory=str(FLAGS_DIR)), name="flags")
 if ADMIN_DIR.exists():

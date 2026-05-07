@@ -260,6 +260,20 @@ email-validator, alembic, pytest, httpx
 
 ---
 
+### P19 — `NameError: timedelta` rompió `/chat` durante 7 días sin que nadie lo viese
+
+**Qué pasó:** El commit `d507a8c` (30/4/2026, "Conversation retention: auto-archive at 30d idle") añadió `timedelta(days=AUTO_ARCHIVE_DAYS)` en `chat_engine._get_or_create_conversation()` pero olvidó añadir `timedelta` al `from datetime import datetime, timezone`. Cada llamada a `POST /chat/message` y `POST /chat/stream` levantaba `NameError: name 'timedelta' is not defined` desde ese commit. En streaming el síntoma cara al cliente era `ERR_HTTP2_PROTOCOL_ERROR` (la excepción cierra el stream a medias y Traefik lo reporta como protocol error sobre HTTP/2). En el endpoint no-streaming era 500 limpio. **Ningún tenant pudo chatear desde el 30/4 hasta el 7/5.**
+
+**Cómo lo descubrí:** El usuario probó el bot recién desplegado en staging, vio "Hi ha hagut un error de connexió" en la burbuja, y reportó. Confirmado mirando los logs de Easypanel — había una traza Python por cada mensaje enviado.
+
+**Cómo lo solucioné:** Una línea — añadir `timedelta` al import (commit `bd4b143`).
+
+**Por qué nadie lo vio antes:** El repo no tenía linter, ni pre-commit, ni CI, ni smoke test, ni monitor externo. El commit pasó directo a `main`, Easypanel auto-desplegó, y como nadie chateó en staging durante días el bug pasó silencioso. Cuando alguien probó el chat, fallaba.
+
+**Regla para futuros:** ver R13.
+
+---
+
 ## 3. REGLAS PARA FUTUROS
 
 ### R01 — Checklist pre-deploy
@@ -323,8 +337,32 @@ Cada vez que se añade un campo traducible:
 ### R12 — Documentar el "por qué" de cada hack
 Si algo se hace de forma no-obvia (sync XHR, doble storage, skip de rows), comentar en el código POR QUÉ. El "qué" se lee; el "por qué" se pierde.
 
+### R13 — Defensa por capas contra regresiones (ver P19)
+
+**Capa 1 — Linter en CI (obligatoria, montada el 7/5/2026):**
+- `pyproject.toml` con `ruff` configurado: reglas `F` (Pyflakes — `F821 undefined-name` habría cazado P19), `E9` (errores de sintaxis), `B` (bugbear), `I` (orden de imports).
+- `.github/workflows/ci.yml` corre `ruff check .` en cada push y PR.
+- Si la build sale roja (❌ en GitHub), **no redeployar ese commit en Easypanel**. Easypanel todavía despliega de `main` directamente, así que el rojo de CI es la única señal de stop.
+- Para correr local antes de commitear: `pip install ruff==0.15.12 && ruff check .`
+
+**Capa 2 — Smoke test (pendiente):**
+- `pytest backend/tests/test_chat_smoke.py` que arranca FastAPI con SQLite en memoria y un mock de la AI, pega a `POST /chat/message`, asserta 200. Se añade al mismo workflow tras `ruff check`.
+
+**Capa 3 — Monitor externo (pendiente):**
+- UptimeRobot / BetterStack pegando a `/health` y a `/chat/message` cada 5 min. Alerta por email + SMS si falla 2 veces seguidas. Es la única red que detecta bugs ya en producción que el linter no cazó.
+
+**Capa 4 — Política de despliegue (cuando haya clientes en producción):**
+- `main` → staging automático.
+- Tag `release-*` → producción manual.
+- Nunca redeployar un commit con CI roja.
+
+**Reglas operativas:**
+- Toda regla de bug-class (`F821`, `F811`, `F501`, `E9*`) en `[tool.ruff.lint]` está prohibida silenciar sin escribir el motivo en el `pyproject.toml`. Las reglas estilísticas (`E501`, etc.) sí se pueden ignorar libremente.
+- Cualquier nueva categoría de bug que llegue a producción merece nueva entrada Pxx aquí, y, si es posible cazarla con un linter, una regla nueva en `pyproject.toml`. Las defensas se construyen incidente a incidente.
+
 ---
 
 **Documento generado:** abril 2026
+**Última actualización:** mayo 2026 (P19, R13)
 **Proyecto:** chatbot-mvp
 **Entorno:** hub-stage (chatbot-stage.hubdpb.com)

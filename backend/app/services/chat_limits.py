@@ -20,7 +20,6 @@ from app.models.business import Business
 from app.models.conversation import Conversation
 from app.models.message import Message
 
-
 # Percentage of the monthly quota that triggers the warning. Hardcoded for now;
 # move to settings.AI_QUOTA_WARNING_THRESHOLD if we ever need to tune per env.
 QUOTA_WARNING_THRESHOLD = 0.80

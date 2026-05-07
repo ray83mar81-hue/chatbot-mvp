@@ -1,15 +1,14 @@
 import json
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from app.database import Base, get_db
 from app.main import app
 from app.models.business import Business
 from app.models.contact_request import ContactRequest
 from app.models.language import Language
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 TEST_DB_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})

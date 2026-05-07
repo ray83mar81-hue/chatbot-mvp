@@ -1,0 +1,36 @@
+# Continuous Integration: lint every push and PR. Catches the class of
+# bugs that have shipped to staging unreviewed (e.g. NameError from a
+# missing import — see docs/chatbot-mvp-lessons.md, P19).
+#
+# This workflow does NOT block deploys today (Easypanel deploys directly
+# from the repo). Treat the red ❌ on a commit as a manual stop signal:
+# do not redeploy a commit whose CI is red.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Pin ruff to avoid surprise rule changes between versions.
+      # Bump intentionally when we want to adopt new checks.
+      - name: Install ruff
+        run: pip install ruff==0.15.12
+
+      - name: Lint
+        run: ruff check .

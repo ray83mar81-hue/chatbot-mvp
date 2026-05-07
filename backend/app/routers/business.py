@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import assert_business_access, assert_business_write, get_current_user, require_superadmin
+from app.deps import (
+    assert_business_access,
+    assert_business_write,
+    get_current_user,
+    require_superadmin,
+)
 from app.models.admin_user import AdminUser
 from app.models.business import Business
 from app.models.business_translation import BusinessTranslation

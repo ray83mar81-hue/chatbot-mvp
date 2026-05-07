@@ -9,7 +9,13 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.admin_user import AdminUser
-from app.schemas.auth import AdminUserCreate, ChangePasswordRequest, LoginRequest, LoginResponse, MeResponse
+from app.schemas.auth import (
+    AdminUserCreate,
+    ChangePasswordRequest,
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
