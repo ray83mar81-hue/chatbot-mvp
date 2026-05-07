@@ -274,6 +274,27 @@ email-validator, alembic, pytest, httpx
 
 ---
 
+### P20 — Traducción de negocio fallaba con "Unterminated string" desde abril por `max_tokens` insuficiente + UI mostraba modelo equivocado
+
+**Qué pasó:** El endpoint `POST /business/{id}/translate` llamaba a `chat_json(..., max_tokens=2000, business=business)`. Con prompts largos (un `extra_info` de ~5000 palabras como el del Assistent Digital), el modelo escribía la respuesta JSON, llegaba al límite de 2000 tokens de salida, y se cortaba a media palabra → JSON no parseable, error `AI response was not valid JSON: Unterminated string starting at: line 6 column 1...`. El admin veía "Error al traducir: Error" sin más pista. El bug llevaba semanas: incidencias del 23/4 (Comidas La Cartoixa #2), 5/5 y 7/5 (Assistent Digital #3) registran exactamente el mismo síntoma.
+
+Encima, la línea "Precios usados: openai/gpt-4o-mini — input $0.15/M, output $0.6/M" del panel de plataforma confundía al operador: es un dump del endpoint `/superadmin/pricing` que devuelve **siempre la config GLOBAL** (env vars), incluso cuando se está viendo un tenant que tiene config per-tenant distinta (Haiku 4.5 por OpenRouter en este caso). Un cliente podía configurar su propia IA y la UI seguía diciendo que se usaba la global.
+
+**Cómo lo descubrí:** Marta creó el primer tenant con un prompt largo (Assistent Digital), intentó traducir desde el panel de Idiomas, vio "Error al traducir: Error", y revisó el panel de incidencias. La incidencia con el JSON truncado dio la pista, y el código revelaba el `max_tokens=2000` hardcoded.
+
+**Cómo lo solucioné:**
+1. `max_tokens` subido de 2000 → 16000 en `business_translation_service.py`. Haiku 4.5 acepta 64k de output, así que 16k da margen para 5+ idiomas largos en una sola llamada sin coste runaway (Haiku son $5/M output, ~$0.08 por traducción completa de 16k tokens).
+2. `/superadmin/pricing` ahora acepta `?business_id=X` opcional. Sin parámetro, devuelve la config global como antes (compatibilidad). Con parámetro, resuelve la config efectiva del tenant (per-tenant si la tiene, fallback global). El admin frontend puede usarlo para mostrar precios reales en vistas per-tenant.
+3. Relabeled la línea "Precios usados" → "Modelo y precios por defecto del sistema (env globales)" en el panel de plataforma para que el operador no asuma que son los precios usados realmente.
+
+**Regla para futuros:**
+
+- **`max_tokens` en cualquier llamada a la IA debe escalar con el tamaño esperado de la entrada.** Hardcodear un número pequeño porque "los prompts de prueba eran cortos" es una bomba de relojería en cuanto un cliente real pega un prompt grande. Siempre dejar el límite con holgura ≥3× el peor caso conocido y comentar el porqué.
+- **Cuando un dato existe en dos niveles (global + per-tenant), la UI tiene que ser clara sobre cuál está mostrando.** "Precios usados" sin contexto es ambiguo; "precios por defecto del sistema" o "precios efectivos de este tenant" no lo son.
+- **JSON parse errors de respuestas AI casi siempre son truncamiento por `max_tokens`.** Antes de tocar el parser, mirar el `finish_reason` y el límite. (TODO: añadir log de `finish_reason` en `chat_json` para que la incidencia diga "truncado" en vez de un parse error genérico.)
+
+---
+
 ## 3. REGLAS PARA FUTUROS
 
 ### R01 — Checklist pre-deploy

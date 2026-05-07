@@ -159,8 +159,39 @@ def _stats_for(business: Business, db: Session) -> BusinessStats:
 
 
 @router.get("/pricing", response_model=PricingResponse)
-def get_pricing(_: AdminUser = Depends(require_superadmin)):
-    """Current AI model + unit prices used for cost calculations."""
+def get_pricing(
+    business_id: int | None = None,
+    _: AdminUser = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+):
+    """AI model + unit prices used for cost calculations.
+
+    Without `business_id`: returns the platform-wide defaults (env vars).
+    With `business_id`: returns the EFFECTIVE config for that tenant —
+    its per-tenant override if set, otherwise the global fallback. The
+    admin UI passes this when displaying a tenant-specific view, so the
+    "Precios usados" line stops lying when a tenant runs a different
+    model than the platform default (P20).
+    """
+    if business_id is not None:
+        business = db.query(Business).filter(Business.id == business_id).first()
+        if not business:
+            raise HTTPException(status_code=404, detail="Business not found")
+        return PricingResponse(
+            ai_model=business.ai_model or settings.AI_MODEL,
+            ai_provider=(business.ai_provider or settings.AI_PROVIDER).lower(),
+            input_per_million_usd=(
+                business.ai_input_price_per_million
+                if business.ai_input_price_per_million is not None
+                else settings.AI_PRICE_INPUT_PER_MILLION
+            ),
+            output_per_million_usd=(
+                business.ai_output_price_per_million
+                if business.ai_output_price_per_million is not None
+                else settings.AI_PRICE_OUTPUT_PER_MILLION
+            ),
+        )
+
     return PricingResponse(
         ai_model=settings.AI_MODEL,
         ai_provider=settings.AI_PROVIDER,

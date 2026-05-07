@@ -132,10 +132,17 @@ async def translate_business(
     )
 
     try:
+        # max_tokens: long landing-page prompts (~5000 words of extra_info)
+        # produce ~7k output tokens per language. With multiple targets in
+        # the same call we easily blow past the old 2000 limit, leaving the
+        # AI mid-sentence and the JSON unparseable ("Unterminated string").
+        # See P20 in docs/chatbot-mvp-lessons.md. Haiku 4.5 supports up to
+        # 64k output; 16k gives room for ~5 long languages in one shot
+        # without runaway cost (Haiku is cheap on output, $5/M).
         raw_text = await chat_json(
             system="You are a professional translator. Reply with valid JSON only.",
             user=prompt,
-            max_tokens=2000,
+            max_tokens=16000,
             business=business,
         )
     except Exception as e:
