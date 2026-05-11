@@ -321,6 +321,35 @@ Ningún dato se perdió en el incidente — `Business.*` siempre los tuvo. Cuand
 
 ---
 
+### P22 — Admin viejo cacheado en el navegador anulaba el fix de P21
+
+**Qué pasó:** Después de desplegar el fix de P21, Marta abrió el admin del nuevo tenant (Mis Gastos Pro, Business #5 recién seedeado), activó es/fr en la pestaña "Idiomas", pulsó "Guardar idiomas", lanzó "Traducir con IA" y obtuvo "Traducción completada: ES, FR" — pero las traducciones quedaron vacías. El bot funcionaba (el chat sí tira de `Business.*`), pero las pestañas de traducciones del admin estaban en blanco.
+
+El backend tenía el fix de P21 correcto. El navegador, no: estaba sirviendo el `admin/index.html` antiguo desde caché. La versión vieja sólo hacía fallback a `Business.*` cuando NO había fila `BusinessTranslation` para el idioma por defecto. Pero "Guardar idiomas" ([admin/index.html:3702-3709](admin/index.html#L3702-L3709)) crea filas parciales (sólo `welcome` poblado) para cada idioma activo, incluido el default. Resultado:
+
+1. Marta activa es/fr → click "Guardar idiomas" → admin crea filas vacías es/fr/ca (sólo welcome).
+2. `loadBusiness()` se ejecuta con el código viejo: `bizDataState.translations[ca]` se lee de la fila vacía → sin fallback → todos los campos vacíos.
+3. La pestaña "Datos del negocio" en `ca` se renderiza vacía.
+4. Click "Traducir con IA" → `captureBizDataTab()` lee el form (vacío) → PUT `/translations/ca` con `name=""`, `description=""`, … → la fila `ca` ahora es explícitamente vacía.
+5. POST `/translate`. El backend (con fix P21) intenta fallback a `Business.*` per-field. La fila `ca` tiene `name=""` → fallback usa `business.name` → la IA recibe contenido correcto → genera traducciones correctas.
+6. **Pero** el admin viejo, al recibir la respuesta, escribe las traducciones a `bizDataState.translations[es/fr]` y renderiza. Aquí ya no había bug — las traducciones vuelven correctas.
+
+Wait, releyendo el incidente: las traducciones cliente vinieron vacías. Eso significa que el backend SÍ propagó la fuente vacía. Posible variante: el `captureBizDataTab` del HTML antiguo, antes del PUT, sobrescribió la fila `ca` con strings vacíos, dejando el backend sin nada de qué tirar el fallback. El fallback de `_pick` en business_translation_service.py mira si la fila tiene contenido; si la fila acaba de ser pisada con `""`, salta al Business.* base. Eso debería funcionar. La hipótesis exacta queda abierta — pero la causa común a todo esto es: **el admin que ve el operador no es el que está desplegado**.
+
+El motivo final es que [main.py:580](backend/app/main.py#L580) montaba `/admin` con el `StaticFiles` plano, sin headers anti-cache. El `/widget` sí los tenía vía `RevalidatingStaticFiles` (corolario de P15, commit `b56f5fd`), pero `/admin` se quedó fuera. Cualquier fix al `admin/index.html` puede tardar horas o días en propagar a los navegadores de los operadores hasta que hagan Ctrl+Shift+R.
+
+**Cómo lo descubrí:** Marta reportó "guardé texto y aparece 'Traducción completada: ES, FR' pero están vacías; no le he dado a traducir". Al rastrear el origen del mensaje en el código vimos que sólo se dispara desde `translateAll()` — luego sí se había llamado, posiblemente por click accidental. Y al ver que el síntoma cuadraba con un admin sin el fix de P21 pese a que el deploy lo tenía, miramos `main.py` y vimos `/admin` montado sin cache control.
+
+**Cómo lo solucioné:** Cambiar el mount de `/admin` a `RevalidatingStaticFiles(..., html=True)` — los headers `Cache-Control: no-cache, must-revalidate` fuerzan al navegador a revalidar (ETag) en cada petición. Es 304 cuando no ha cambiado (cero coste), y 200 con el HTML nuevo cuando sí. P15 ya nos había enseñado esto para `/widget`; replicarlo en `/admin` era el patrón correcto y simplemente se nos había escapado.
+
+**Regla para futuros:**
+
+- **Cualquier archivo estático que la aplicación pueda servir y que sea actualizado por nuestros propios deploys debe ir con `RevalidatingStaticFiles`, no `StaticFiles`.** El coste de la revalidación es mínimo (304 sin body); el coste de servir versión vieja durante un incidente es enorme. Aplica a `/widget` (P15), `/admin` (P22), y a cualquier futuro `/landing-templates`, `/embeds`, etc.
+- **Cuando un bug parece "fijado pero no fijado", lo primero a sospechar antes de tocar código otra vez es la caché del navegador.** F12 → Network → Disable cache, o Ctrl+Shift+R para descartarlo en 5 segundos. No es lujo, es protocolo.
+- **Diagnóstico cruzado backend/frontend en bugs como P21**: cuando un bug atraviesa dos capas, después de fixar ambas hay que verificar que las dos están desplegadas Y cargadas en el cliente. Sin `RevalidatingStaticFiles`, la segunda condición no estaba garantizada.
+
+---
+
 ## 3. REGLAS PARA FUTUROS
 
 ### R01 — Checklist pre-deploy

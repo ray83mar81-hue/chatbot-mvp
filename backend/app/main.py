@@ -577,7 +577,18 @@ if WIDGET_DIR.exists():
 if FLAGS_DIR.exists():
     app.mount("/flags", StaticFiles(directory=str(FLAGS_DIR)), name="flags")
 if ADMIN_DIR.exists():
-    app.mount("/admin", StaticFiles(directory=str(ADMIN_DIR), html=True), name="admin")
+    # /admin uses the same revalidating mount as /widget. Without it,
+    # admin/index.html (a single monolithic file) gets aggressively
+    # cached by browsers, and operators keep seeing the pre-fix version
+    # for days after a deploy. See P22 in docs/chatbot-mvp-lessons.md
+    # for the incident where a stale cached admin made every "Guardar
+    # idiomas + Traducir con IA" produce empty translations even after
+    # the backend was already running the P21 fix.
+    app.mount(
+        "/admin",
+        RevalidatingStaticFiles(directory=str(ADMIN_DIR), html=True),
+        name="admin",
+    )
 
 
 @app.get("/")
