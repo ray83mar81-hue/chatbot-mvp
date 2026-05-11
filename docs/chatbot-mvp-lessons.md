@@ -295,6 +295,32 @@ Encima, la línea "Precios usados: openai/gpt-4o-mini — input $0.15/M, output 
 
 ---
 
+### P21 — Datos del negocio invisibles en el idioma por defecto tras guardar el formulario de contacto
+
+**Qué pasó:** Los datos del negocio (name, description, extra_info…) se guardan en dos sitios paralelos: las columnas base `Business.*` y filas `BusinessTranslation` per idioma. El seed script escribe a `Business.*`. El admin, al guardar las **etiquetas del formulario de contacto** en el idioma fuente, hace `PUT /business/{id}/translations/ca` con un payload que sólo contiene `contact_texts`. Como esa fila no existía, el endpoint la crea con `name=""`, `description=""`, `extra_info=""`, etc. (ver `routers/business.py` upsert_business_translation).
+
+A partir de ese momento dos cosas fallan:
+1. La pestaña "Datos del negocio" del admin sólo hacía fallback a `Business.*` **si NO había fila de traducción**. Si la fila existe con campos vacíos, los muestra vacíos. El operador ve el formulario "Datos del negocio" en blanco aunque la BBDD tiene los datos intactos en `Business.*`.
+2. El servicio `business_translation_service.translate_business()` leía la fila fuente literalmente — `source["name"] = src_row.name` — sin fallback a `Business.name`. Si el operador pulsaba "Traducir con IA" estando el formulario en blanco, la IA recibía como fuente "" para name/description/extra_info y generaba traducciones igual de vacías para los idiomas destino. Cascada perfecta.
+
+El chat **sí** funcionaba correctamente porque `chat_engine._get_localized_fields()` ya implementaba el fallback per-field a `Business.*` con un helper `pick(tr_val, base_val)`. Es decir, la verdad del bot venía de las columnas base; sólo la admin y la traducción usaban un camino roto.
+
+**Cómo lo descubrí:** Marta tradujo la pestaña Idiomas y volvió a "Datos del negocio". Vio el formulario vacío incluso en el idioma por defecto, y reportó: "los datos del negocio no aparecen ni en el idioma por defecto, pero las traducciones de los campos del formulario sí están". Esa pista (form contact OK + business data vacío) localizó el bug en menos de 2 minutos.
+
+**Cómo lo solucioné:**
+1. `business_translation_service.translate_business()`: añadido helper `_pick(tr_val, base_val)` que hace fallback per-field a `Business.*` cuando el campo de la traducción está vacío. Mismo patrón que el chat engine.
+2. `admin/index.html` `loadBusiness()`: el bloque que poblaba `bizDataState.translations[defaultLang]` ahora hace merge per-field con `Business.*` siempre (no sólo cuando la fila no existe). Si la fila tiene `name=""` y `Business.name` tiene contenido, el formulario muestra `Business.name`.
+
+Ningún dato se perdió en el incidente — `Business.*` siempre los tuvo. Cuando se redeploya, los datos vuelven a aparecer solos en el admin.
+
+**Regla para futuros:**
+
+- **Cuando un campo tiene dos fuentes (base + override), `read` debe hacer fallback per-field con un helper compartido, no per-row.** El bug nació porque el chat tenía el helper correcto pero el admin y la traducción no lo reutilizaban. Centralizar el helper o duplicar el patrón con la misma semántica — ambas opciones, no NO usar fallback.
+- **Crear una fila parcial es válido, pero los lectores no pueden asumir que "fila existe" = "fila tiene todos los campos rellenos".** El endpoint que crea filas con sólo `contact_texts` no está mal; los lectores eran ingenuos.
+- **El bug atravesaba dos capas (backend service + admin frontend) sin que ninguna sola fuera "responsable única".** Esta clase de bug es invisible en revisión de cada PR por separado; sólo se detecta probando el flujo end-to-end. Confirma R13: necesitamos un smoke test que ejercite "guardar contact_texts → click traducir → verificar que name no está vacío".
+
+---
+
 ## 3. REGLAS PARA FUTUROS
 
 ### R01 — Checklist pre-deploy

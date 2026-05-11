@@ -2840,7 +2840,14 @@
         document.getElementById("bizPhone").value = b.phone || "";
         document.getElementById("bizEmail").value = b.email || "";
 
-        // 4) Populate "Datos del negocio" translations
+        // 4) Populate "Datos del negocio" translations.
+        // For the default language, merge BusinessTranslation fields with
+        // Business.* per-field — a row may exist with only contact_texts
+        // populated (created by saving the contact form), leaving
+        // name/description/extra_info empty even though Business.* has them.
+        // Without this merge, the form would render blank for the default
+        // language and a subsequent "Translate" would propagate the empty
+        // source to every target language. See P21.
         bizDataState.currentTab = defaultLang;
         bizDataState.translations = {};
         translations.forEach(t => {
@@ -2851,14 +2858,16 @@
             auto_translated: t.auto_translated, needs_review: t.needs_review,
           };
         });
-        if (!bizDataState.translations[defaultLang]) {
-          bizDataState.translations[defaultLang] = {
-            name: b.name || "", description: b.description || "",
-            address: b.address || "", schedule: b.schedule || "{}",
-            extra_info: b.extra_info || "",
-            auto_translated: false, needs_review: false,
-          };
-        }
+        const dT = bizDataState.translations[defaultLang] || { auto_translated: false, needs_review: false };
+        bizDataState.translations[defaultLang] = {
+          name: (dT.name && dT.name.trim()) || b.name || "",
+          description: (dT.description && dT.description.trim()) || b.description || "",
+          address: (dT.address && dT.address.trim()) || b.address || "",
+          schedule: (dT.schedule && dT.schedule.trim() && dT.schedule.trim() !== "{}") ? dT.schedule : (b.schedule || "{}"),
+          extra_info: (dT.extra_info && dT.extra_info.trim()) || b.extra_info || "",
+          auto_translated: dT.auto_translated || false,
+          needs_review: dT.needs_review || false,
+        };
         renderBizDataTabs();
         document.getElementById("globalTranslateBar").style.display = supportedLangs.length > 1 ? "flex" : "none";
 

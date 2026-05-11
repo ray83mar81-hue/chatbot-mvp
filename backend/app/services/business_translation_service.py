@@ -91,12 +91,33 @@ async def translate_business(
     if not targets:
         return []
 
-    # Get source content from the source-lang translation row, or legacy fields
+    # Get source content from the source-lang translation row, falling back
+    # to Business.* on a PER-FIELD basis when the translation row exists
+    # but a given field is empty. Without this fallback, saving the contact
+    # form for the source language (which creates a BusinessTranslation row
+    # with contact_texts populated but name/description/extra_info empty)
+    # would cause the next /translate call to read empty source and produce
+    # empty translations for every target language. See P21.
     src_row = (
         db.query(BusinessTranslation)
         .filter_by(business_id=business.id, language_code=source_language_code)
         .first()
     )
+
+    def _pick(tr_val: str | None, base_val: str | None, default: str = "") -> str:
+        v = (tr_val or "").strip()
+        return v if v else ((base_val or "").strip() or default)
+
+    # Welcome lives on Business.welcome_messages (JSON dict per language)
+    # when the BusinessTranslation row hasn't set its own welcome.
+    try:
+        welcomes = json.loads(business.welcome_messages or "{}")
+        if not isinstance(welcomes, dict):
+            welcomes = {}
+    except (json.JSONDecodeError, TypeError):
+        welcomes = {}
+    base_welcome = welcomes.get(source_language_code, "")
+
     if src_row:
         try:
             src_faqs = json.loads(src_row.faqs_json or "[]")
@@ -104,25 +125,28 @@ async def translate_business(
                 src_faqs = []
         except (json.JSONDecodeError, TypeError):
             src_faqs = []
-        source = {"name": src_row.name, "description": src_row.description,
-                  "address": src_row.address, "schedule": src_row.schedule or "{}",
-                  "extra_info": src_row.extra_info, "welcome": src_row.welcome or "",
-                  "contact_texts": src_row.contact_texts or "{}",
-                  "faqs": src_faqs}
+        source = {
+            "name":        _pick(src_row.name,        business.name),
+            "description": _pick(src_row.description, business.description),
+            "address":     _pick(src_row.address,     business.address),
+            "schedule":    _pick(src_row.schedule,    business.schedule, "{}"),
+            "extra_info":  _pick(src_row.extra_info,  business.extra_info),
+            "welcome":     _pick(src_row.welcome,     base_welcome),
+            "contact_texts": (src_row.contact_texts or "{}").strip() or "{}",
+            "faqs": src_faqs,
+        }
         src_privacy_url = src_row.privacy_url or ""
     else:
-        # Fallback: get welcome from welcome_messages JSON on the business
-        import json as _json
-        try:
-            welcomes = _json.loads(business.welcome_messages or "{}")
-        except Exception:
-            welcomes = {}
-        source = {"name": business.name, "description": business.description,
-                  "address": business.address, "schedule": business.schedule or "{}",
-                  "extra_info": business.extra_info,
-                  "welcome": welcomes.get(source_language_code, ""),
-                  "contact_texts": "{}",
-                  "faqs": []}
+        source = {
+            "name": business.name or "",
+            "description": business.description or "",
+            "address": business.address or "",
+            "schedule": business.schedule or "{}",
+            "extra_info": business.extra_info or "",
+            "welcome": base_welcome,
+            "contact_texts": "{}",
+            "faqs": [],
+        }
         src_privacy_url = ""
 
     prompt = _build_prompt(
