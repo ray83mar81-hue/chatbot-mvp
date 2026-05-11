@@ -1,14 +1,26 @@
-import json
+import os
 
-import pytest
-from app.database import Base, get_db
-from app.main import app
-from app.models.business import Business
-from app.models.contact_request import ContactRequest
-from app.models.language import Language
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+# IMPORTANT: force test-friendly env vars BEFORE importing app.*. The app
+# config evaluates settings at import time (engine = create_engine(...))
+# and the default DATABASE_URL is PostgreSQL, which requires psycopg2 and
+# a live server. Set sqlite + a dummy JWT secret here so the test process
+# never tries to reach a real database. CI relies on this too — the
+# workflow does not install psycopg2.
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+os.environ.setdefault("JWT_SECRET", "test-secret-not-used-in-prod")
+os.environ.setdefault("AI_KEY_ENCRYPTION_SECRET", "")  # disable Fernet in tests
+
+import json  # noqa: E402
+
+import pytest  # noqa: E402
+from app.database import Base, get_db  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models.business import Business  # noqa: E402
+from app.models.contact_request import ContactRequest  # noqa: E402,F401
+from app.models.language import Language  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 TEST_DB_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
@@ -72,6 +84,26 @@ def setup_db():
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+@pytest.fixture
+def auth_client(client):
+    """A TestClient pre-authenticated as a freshly-bootstrapped superadmin.
+
+    Every test runs against a fresh DB (see setup_db autouse) so this fixture
+    can safely call /auth/register: the AdminUser table is always empty,
+    bootstrap creates the first user as superadmin, and the JWT goes into
+    the default headers. Use this for any endpoint guarded by
+    require_superadmin or get_current_user.
+    """
+    res = client.post("/auth/register", json={
+        "email": "owner@example.com",
+        "password": "secret123",
+    })
+    assert res.status_code == 200, res.text
+    token = res.json()["access_token"]
+    client.headers["Authorization"] = f"Bearer {token}"
+    return client
 
 
 @pytest.fixture

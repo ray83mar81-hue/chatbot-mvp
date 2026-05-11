@@ -93,13 +93,13 @@ def test_submit_empty_message_rejected(client):
 # ── Anti-spam ─────────────────────────────────────────
 
 
-def test_honeypot_silently_rejected(client):
+def test_honeypot_silently_rejected(client, auth_client):
     res = _submit(client, session_id="spam-1", honeypot="gotcha")
     assert res.status_code == 200
     assert res.json()["id"] == 0  # fake ID, not saved
 
     # Verify nothing was actually saved for this session
-    all_contacts = client.get("/contact/requests?business_id=1").json()
+    all_contacts = auth_client.get("/contact/requests?business_id=1").json()
     for c in all_contacts:
         assert c["name"] != "Juan Pérez" or c["id"] != 0
 
@@ -114,42 +114,42 @@ def test_rate_limit(client):
     assert res.status_code == 429
 
 
-def test_form_disabled(client):
+def test_form_disabled(client, auth_client):
     """Submit should be rejected if contact_form_enabled is false."""
-    # Disable it
-    client.put("/business/1", json={"contact_form_enabled": False})
+    # Disable it (requires auth)
+    auth_client.put("/business/1", json={"contact_form_enabled": False})
     res = _submit(client, session_id="disabled-1")
     assert res.status_code == 403
     # Re-enable for other tests
-    client.put("/business/1", json={"contact_form_enabled": True})
+    auth_client.put("/business/1", json={"contact_form_enabled": True})
 
 
 # ── Admin CRUD ────────────────────────────────────────
 
 
-def test_list_contacts(client):
+def test_list_contacts(client, auth_client):
     _submit(client, session_id="list-1")
-    res = client.get("/contact/requests?business_id=1")
+    res = auth_client.get("/contact/requests?business_id=1")
     assert res.status_code == 200
     assert len(res.json()) >= 1
 
 
-def test_list_contacts_filter_status(client):
+def test_list_contacts_filter_status(client, auth_client):
     _submit(client, session_id="filter-1")
-    contacts = client.get("/contact/requests?business_id=1&status=new").json()
+    contacts = auth_client.get("/contact/requests?business_id=1&status=new").json()
     assert all(c["status"] == "new" for c in contacts)
 
 
-def test_get_contact_detail(client):
+def test_get_contact_detail(client, auth_client):
     cid = _submit(client, session_id="detail-1").json()["id"]
-    res = client.get(f"/contact/requests/{cid}")
+    res = auth_client.get(f"/contact/requests/{cid}")
     assert res.status_code == 200
     assert res.json()["name"] == "Juan Pérez"
 
 
-def test_update_contact_status(client):
+def test_update_contact_status(client, auth_client):
     cid = _submit(client, session_id="update-1").json()["id"]
-    res = client.put(f"/contact/requests/{cid}", json={
+    res = auth_client.put(f"/contact/requests/{cid}", json={
         "status": "contacted",
         "notes": "Llamé y confirmó",
     })
@@ -158,22 +158,22 @@ def test_update_contact_status(client):
     assert res.json()["notes"] == "Llamé y confirmó"
 
 
-def test_update_invalid_status(client):
+def test_update_invalid_status(client, auth_client):
     cid = _submit(client, session_id="inv-status-1").json()["id"]
-    res = client.put(f"/contact/requests/{cid}", json={"status": "invalid"})
+    res = auth_client.put(f"/contact/requests/{cid}", json={"status": "invalid"})
     assert res.status_code == 422
 
 
-def test_delete_contact_gdpr(client):
+def test_delete_contact_gdpr(client, auth_client):
     cid = _submit(client, session_id="delete-1").json()["id"]
-    res = client.delete(f"/contact/requests/{cid}")
+    res = auth_client.delete(f"/contact/requests/{cid}")
     assert res.status_code == 200
 
     # Verify gone
-    res = client.get(f"/contact/requests/{cid}")
+    res = auth_client.get(f"/contact/requests/{cid}")
     assert res.status_code == 404
 
 
-def test_delete_contact_not_found(client):
-    res = client.delete("/contact/requests/99999")
+def test_delete_contact_not_found(auth_client):
+    res = auth_client.delete("/contact/requests/99999")
     assert res.status_code == 404

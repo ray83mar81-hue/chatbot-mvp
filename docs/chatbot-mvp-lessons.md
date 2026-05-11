@@ -392,8 +392,14 @@ Si algo se hace de forma no-obvia (sync XHR, doble storage, skip de rows), comen
 - Si la build sale roja (❌ en GitHub), **no redeployar ese commit en Easypanel**. Easypanel todavía despliega de `main` directamente, así que el rojo de CI es la única señal de stop.
 - Para correr local antes de commitear: `pip install ruff==0.15.12 && ruff check .`
 
-**Capa 2 — Smoke test (pendiente):**
-- `pytest backend/tests/test_chat_smoke.py` que arranca FastAPI con SQLite en memoria y un mock de la AI, pega a `POST /chat/message`, asserta 200. Se añade al mismo workflow tras `ruff check`.
+**Capa 2 — Smoke tests (activa desde el 7/5/2026):**
+- `backend/tests/test_chat_smoke.py` arranca FastAPI con SQLite y un mock de la IA, ejercita los caminos críticos y asserta el comportamiento. Lo que cubre hoy:
+  - `test_chat_message_does_not_500` y `test_chat_stream_does_not_500` — habrían cazado P19 antes de mergear.
+  - `test_translate_preserves_source_data` — sanity check del flujo end-to-end "save contact_texts → translate → no se pierde data del idioma fuente".
+  - `test_translate_falls_back_per_field` (parametrizado) — el guarda específico de P21: captura el prompt que va a la IA y asserta que el valor esperado (de la fila de traducción si tiene contenido, o de `Business.*` si la fila está vacía) llega al prompt.
+- Convención: cada bug Pxx que pueda cazarse con un test gana un test en `tests/test_chat_smoke.py` o un archivo nuevo `tests/test_<area>_smoke.py`. El comentario del test cita el Pxx. El test debe fallar contra el commit pre-fix y pasar contra el post-fix — no es smoke test si no caza la regresión.
+- El workflow CI corre primero `ruff check .` y, **sólo si pasa**, ejecuta `pytest tests/ -q --tb=short`. El test job depende del lint job (`needs: lint`).
+- Variables de entorno fijadas en el workflow para que el proceso de tests nunca toque la BBDD real: `DATABASE_URL=sqlite:///./test.db`, `JWT_SECRET=test-secret-not-used-in-prod`, `AI_KEY_ENCRYPTION_SECRET=""`. Las mismas las setea `tests/conftest.py` antes de cualquier `from app.*` para que correr local sin Postgres funcione igual.
 
 **Capa 3 — Monitor externo (pendiente):**
 - UptimeRobot / BetterStack pegando a `/health` y a `/chat/message` cada 5 min. Alerta por email + SMS si falla 2 veces seguidas. Es la única red que detecta bugs ya en producción que el linter no cazó.

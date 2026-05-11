@@ -13,6 +13,7 @@ def test_list_languages(client):
 
 
 def test_get_business_languages(client):
+    """Public endpoint used by the widget — no auth required."""
     res = client.get("/business/1/languages")
     assert res.status_code == 200
     data = res.json()
@@ -24,8 +25,8 @@ def test_get_business_languages(client):
     assert data["welcome_messages"]["en"] == "Hi test"
 
 
-def test_update_business_languages(client):
-    res = client.put(
+def test_update_business_languages(auth_client):
+    res = auth_client.put(
         "/business/1/languages",
         json={
             "supported_languages": ["es", "en", "ca"],
@@ -33,16 +34,16 @@ def test_update_business_languages(client):
             "welcome_messages": {"es": "Hola", "en": "Hi", "ca": "Hola"},
         },
     )
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert len(res.json()["supported"]) == 3
 
     # Verify persisted
-    res = client.get("/business/1/languages")
+    res = auth_client.get("/business/1/languages")
     assert [l["code"] for l in res.json()["supported"]] == ["es", "en", "ca"]
 
 
-def test_update_business_languages_rejects_unknown_code(client):
-    res = client.put(
+def test_update_business_languages_rejects_unknown_code(auth_client):
+    res = auth_client.put(
         "/business/1/languages",
         json={"supported_languages": ["es", "xx"]},
     )
@@ -50,9 +51,9 @@ def test_update_business_languages_rejects_unknown_code(client):
     assert "xx" in res.json()["detail"]
 
 
-def test_update_business_languages_default_must_be_in_supported(client):
+def test_update_business_languages_default_must_be_in_supported(auth_client):
     # Default 'fr' is not in supported_languages list
-    res = client.put(
+    res = auth_client.put(
         "/business/1/languages",
         json={"supported_languages": ["es", "en"], "default_language": "fr"},
     )
@@ -60,8 +61,8 @@ def test_update_business_languages_default_must_be_in_supported(client):
     assert "default_language" in res.json()["detail"]
 
 
-def test_update_business_languages_rejects_empty_list(client):
-    res = client.put(
+def test_update_business_languages_rejects_empty_list(auth_client):
+    res = auth_client.put(
         "/business/1/languages",
         json={"supported_languages": []},
     )
